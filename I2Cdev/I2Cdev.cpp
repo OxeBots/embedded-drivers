@@ -77,7 +77,7 @@ i2c_master_bus_handle_t I2Cdev::get_bus_handle()
  * @param devAddr I2C slave device address
  * @return Device handle or NULL on failure
  */
-i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t devAddr)
+i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t devAddr, uint32_t scl_speed_hz)
 {
     if (global_bus_handle == NULL)
         return NULL;
@@ -97,7 +97,7 @@ i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t devAddr)
     i2c_device_config_t dev_cfg = {
       .dev_addr_length = I2C_ADDR_BIT_LEN_7,
       .device_address = devAddr,
-      .scl_speed_hz = 400000,
+      .scl_speed_hz = scl_speed_hz,
       .scl_wait_us = 0,
       .flags = {.disable_ack_check = 0},
     };

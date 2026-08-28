@@ -20,8 +20,6 @@ VL53L5CX::~VL53L5CX()
 {
     if (m_ranging)
         vl53l5cx_stop_ranging(&m_dev);
-    if (m_dev_handle != nullptr)
-        i2c_master_bus_rm_device(m_dev_handle);
 }
 
 /**
@@ -30,32 +28,22 @@ VL53L5CX::~VL53L5CX()
  * Wakes the sensor from sleep, then loads firmware via the ST API.
  * Must be called once before ranging.
  *
- * @param bus_handle Handle to an existing I2C master bus.
  * @return ESP_OK on success, or an error code.
  */
-esp_err_t VL53L5CX::init(i2c_master_bus_handle_t bus_handle)
+esp_err_t VL53L5CX::init()
 {
-    if (bus_handle == nullptr)
-        return ESP_ERR_INVALID_ARG;
     if (m_initialized)
         return ESP_ERR_INVALID_STATE;
 
-    i2c_device_config_t dev_cfg = {
-      .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-      .device_address = static_cast<uint16_t>(m_dev_addr >> 1),
-      .scl_speed_hz = 1000000,
-      .scl_wait_us = 0,
-      .flags = {.disable_ack_check = 0},
-    };
-
-    esp_err_t ret = i2c_master_bus_add_device(bus_handle, &dev_cfg, &m_dev_handle);
-    if (ret != ESP_OK)
+    // 1 MHz: ranging frames are large and the sensor supports fast-mode plus.
+    i2c_master_dev_handle_t dev_handle = I2Cdev::get_device_handle(m_dev_addr >> 1, 1000000);
+    if (dev_handle == nullptr)
     {
-        ESP_LOGE(TAG, "Failed to add I2C device (0x%02X)", m_dev_addr);
-        return ret;
+        ESP_LOGE(TAG, "Failed to add I2C device (0x%02X)", m_dev_addr >> 1);
+        return ESP_ERR_INVALID_STATE;
     }
 
-    m_dev.platform.handle = m_dev_handle;
+    m_dev.platform.handle = dev_handle;
     m_dev.platform.address = m_dev_addr;
     m_dev.platform.reset_gpio = GPIO_NUM_NC;
 
@@ -72,8 +60,6 @@ esp_err_t VL53L5CX::init(i2c_master_bus_handle_t bus_handle)
     if (status != VL53L5CX_STATUS_OK || is_alive == 0)
     {
         ESP_LOGE(TAG, "VL53L5CX was not detected at 0x%02X", m_dev_addr >> 1);
-        i2c_master_bus_rm_device(m_dev_handle);
-        m_dev_handle = nullptr;
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -92,8 +78,6 @@ esp_err_t VL53L5CX::init(i2c_master_bus_handle_t bus_handle)
     if (status != VL53L5CX_STATUS_OK)
     {
         ESP_LOGE(TAG, "Power state query failed (status %u)", status);
-        i2c_master_bus_rm_device(m_dev_handle);
-        m_dev_handle = nullptr;
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -108,8 +92,6 @@ esp_err_t VL53L5CX::init(i2c_master_bus_handle_t bus_handle)
     if (status != VL53L5CX_STATUS_OK)
     {
         ESP_LOGE(TAG, "Init failed (status %u)", status);
-        i2c_master_bus_rm_device(m_dev_handle);
-        m_dev_handle = nullptr;
         return ESP_ERR_INVALID_STATE;
     }
 

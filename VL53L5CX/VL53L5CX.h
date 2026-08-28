@@ -1,8 +1,6 @@
 #ifndef _VL53L5CX_H_
 #define _VL53L5CX_H_
 
-#include <driver/gpio.h>
-#include <driver/i2c_master.h>
 #include <stdint.h>
 
 #include "I2Cdev.h"
@@ -16,7 +14,7 @@ class VL53L5CX
     VL53L5CX(uint8_t address = DEFAULT_ADDRESS);
     ~VL53L5CX();
 
-    esp_err_t init(i2c_master_bus_handle_t bus_handle);
+    esp_err_t init();
     bool test_connection();
     uint8_t set_resolution(uint8_t resolution);
     uint8_t set_ranging_frequency(uint8_t frequency_hz);
@@ -28,7 +26,6 @@ class VL53L5CX
    private:
     uint8_t m_dev_addr;
     VL53L5CX_Configuration m_dev;
-    i2c_master_dev_handle_t m_dev_handle = nullptr;
     bool m_initialized = false;
     bool m_ranging = false;
 };

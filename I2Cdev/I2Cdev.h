@@ -54,6 +54,13 @@ class I2Cdev
     static void init(i2c_master_bus_handle_t bus_handle);
     static i2c_master_bus_handle_t get_bus_handle();
 
+    /** Get or create the cached device handle for a 7-bit address.
+     * @param devAddr I2C slave device address (7-bit)
+     * @param scl_speed_hz Bus clock for the device when first registered
+     * @return Device handle or NULL on failure
+     */
+    static i2c_master_dev_handle_t get_device_handle(uint8_t devAddr, uint32_t scl_speed_hz = 400000);
+
     static int8_t readBit(uint8_t devAddr,
                           uint8_t regAddr,
                           uint8_t bitNum,
@@ -93,8 +100,6 @@ class I2Cdev
 
     static i2c_dev_cache_entry_t device_cache[I2CDEV_MAX_CACHED_DEVICES];
     static uint8_t cached_count;
-
-    static i2c_master_dev_handle_t get_device_handle(uint8_t devAddr);
 
     static esp_err_t perform_transaction(uint8_t devAddr,
                                          uint8_t * write_buffer,
