@@ -25,5 +25,25 @@ Finder scans it one level deep.
 - I2Cdev: I2C transaction helpers used by the I2C drivers.
 - SPIdev: SPI transaction helpers used by the SPI drivers.
 
-VL53L5CX and NRF24L01 expect the vendor libraries (VL53L5CX-Library,
-esp-idf-mirf) to exist in the host project.
+## Vendor libraries (git submodules)
+
+- esp-idf-mirf: Nordic nRF24L01 driver used by NRF24L01.
+- VL53L5CX-Library: ST ULD API used by VL53L5CX.
+
+They are built as ESP-IDF components, not PIO libraries, because their
+Kconfig options (RF pins/channel, sensor result layout) must stay in the
+host sdkconfig. In an ESP-IDF project, register them before including
+project.cmake:
+
+    set(EXTRA_COMPONENT_DIRS
+        "${CMAKE_CURRENT_LIST_DIR}/components/embedded-drivers/esp-idf-mirf"
+        "${CMAKE_CURRENT_LIST_DIR}/components/embedded-drivers/VL53L5CX-Library")
+
+and keep the PlatformIO LDF from double-building them:
+
+    lib_ignore =
+        esp-idf-mirf
+        VL53L5CX-Library
+
+Clone with --recurse-submodules (or run git submodule update --init
+--recursive after cloning).
