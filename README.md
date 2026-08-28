@@ -25,12 +25,10 @@ the Library Dependency Finder scans it one level deep.
 - I2Cdev: I2C transaction helpers used by the I2C drivers.
 - SPIdev: SPI transaction helpers used by the SPI drivers.
 
-## Shared utilities
+## Math helpers
 
-- constants: shared physical constants and unit conversions.
-- helper_func: angle normalization and value constraining helpers.
-- wheel_ekf: EKF for wheel angular velocity from AS5600 readings.
-- NVSManager: serialized NVS persistence service (single writer task, FreeRTOS queue).
+- constants: shared physical constants and unit conversions (constants.h).
+- helper_func: angle normalization and value constraining (helper_func.h).
 
 ## Vendor libraries (git submodules)
 
@@ -56,6 +54,6 @@ Clone with --recurse-submodules (or run git submodule update --init
 --recursive after cloning).
 
 The repository is self-contained: no include resolves outside this folder
-(ESP-IDF system headers excepted). External note: wheel_ekf builds on the
-vt-linalg and lib-xcore PlatformIO packages, which the host project must
-provide through lib_deps.
+(ESP-IDF system headers excepted). One exception: AS5600 includes the host
+project's wheel EKF header (wheel_ekf.h) for its velocity filter output, so
+hosts using that part of AS5600 must provide it.
