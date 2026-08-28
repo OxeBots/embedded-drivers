@@ -12,6 +12,10 @@
 #include "NVSManager.h"
 #include "constants.h"
 
+// File-local conversion: the shared header avoids RAD_TO_DEG because
+// vt-linalg's standard_constants.h defines it as a macro.
+static constexpr float RAD_TO_DEG = 180.0f / M_PI;
+
 static const char * TAG = "AS5600";
 
 /**
