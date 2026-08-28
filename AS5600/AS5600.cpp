@@ -5,8 +5,6 @@
 
 #include "AS5600.h"
 
-#include <standard_constants.h>
-
 #include <algorithm>
 #include <numeric>
 
@@ -204,14 +202,14 @@ void AS5600::process_new_reading(uint16_t raw_adc_value)
             int clamped_mv = std::clamp(current_voltage_mv, cal_min, cal_max);
             float ratio =
               static_cast<float>(clamped_mv - cal_min) / static_cast<float>(cal_max - cal_min);
-            measured_angle_rad = ratio * 2.0f * static_cast<float>(PI);
+            measured_angle_rad = ratio * 2.0f * static_cast<float>(M_PI);
         }
         else
         {
             // Fallback if not calibrated: map raw value to angle
             const float max_raw = static_cast<float>((1 << ADC_BITWIDTH) - 1);
             measured_angle_rad =
-              static_cast<float>(m_last_avg_value) * (2.0f * static_cast<float>(PI) / max_raw);
+              static_cast<float>(m_last_avg_value) * (2.0f * static_cast<float>(M_PI) / max_raw);
         }
 
         // Update Kalman Filter
