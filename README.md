@@ -7,17 +7,17 @@ the Library Dependency Finder scans it one level deep.
 
 ## Chip drivers
 
-| Folder | Device |
-| --- | --- |
-| 74HC595 | 8-bit shift register |
-| ADXL345 | 3-axis accelerometer (I2C) |
-| AS5600 | Magnetic rotary encoder (I2C) |
-| BL48250 | DC motor driver |
-| CD4052B | Differential analog multiplexer |
-| IMUGY85 | GY-85 IMU breakout (ADXL345 + ITG3200 + QMC5883L) |
-| ITG3200 | 3-axis gyroscope (I2C) |
-| NRF24L01 | 2.4 GHz radio (SPI, wraps esp-idf-mirf) |
-| QMC5883L | 3-axis magnetometer (I2C) |
+| Folder   | Device                                             |
+| -------- | -------------------------------------------------- |
+| 74HC595  | 8-bit shift register                               |
+| ADXL345  | 3-axis accelerometer (I2C)                         |
+| AS5600   | Magnetic rotary encoder (I2C)                      |
+| BL48250  | DC motor driver                                    |
+| CD4052B  | Differential analog multiplexer                    |
+| IMUGY85  | GY-85 IMU breakout (ADXL345 + ITG3200 + QMC5883L)  |
+| ITG3200  | 3-axis gyroscope (I2C)                             |
+| NRF24L01 | 2.4 GHz radio (SPI, wraps esp-idf-mirf)            |
+| QMC5883L | 3-axis magnetometer (I2C)                          |
 | VL53L5CX | 8x8 time-of-flight sensor (wraps VL53L5CX-Library) |
 
 ## Bus helpers
@@ -50,10 +50,8 @@ and keep the PlatformIO LDF from double-building them:
         esp-idf-mirf
         VL53L5CX-Library
 
-Clone with --recurse-submodules (or run git submodule update --init
---recursive after cloning).
+Clone with `--recurse-submodules` (or run git submodule update `--init --recursive` after cloning).
 
 The repository is self-contained: no include resolves outside this folder
-(ESP-IDF system headers excepted). One exception: AS5600 includes the host
-project's wheel EKF header (wheel_ekf.h) for its velocity filter output, so
-hosts using that part of AS5600 must provide it.
+(ESP-IDF system headers excepted). Drivers report raw or unit-converted
+measurements; hosts own any filtering or estimation built on top of them.

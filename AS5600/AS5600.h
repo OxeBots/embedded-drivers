@@ -11,10 +11,6 @@
 
 #include <array>
 #include <atomic>
-#include <memory>
-
-#include "constants.h"
-#include "wheel_ekf.h"
 
 class AS5600
 {
@@ -66,7 +62,7 @@ class AS5600
     esp_err_t get_i2c_raw_angle(uint16_t * angle);
 
     // Analog methods
-    void process_new_reading(uint16_t raw_adc_value);
+    bool process_new_reading(uint16_t raw_adc_value, float * measured_angle_rad);
     esp_err_t calibrate_range(uint32_t duration_ms);
     esp_err_t set_calibration_range(int min_mv = 0, int max_mv = 3300);
 
@@ -79,11 +75,6 @@ class AS5600
     esp_err_t load_calibration_from_nvs();
 
     // Getters
-    float get_angle_rad() const;
-    float get_angle_deg() const;
-    float get_velocity_rad_s() const;
-    float get_rpm() const;
-    float get_acceleration_rps2() const;
     int get_last_voltage_mv() const;
     uint16_t get_last_raw_value() const;
     int get_calib_min() const;
@@ -119,7 +110,6 @@ class AS5600
     };
 
     adc_channel_t m_channel;
-    std::unique_ptr<WheelKalmanFilter> m_filter;
 
     adc_cali_handle_t m_cali_handle = nullptr;
     bool m_is_voltage_calibrated = false;

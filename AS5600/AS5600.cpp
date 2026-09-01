@@ -6,15 +6,11 @@
 #include "AS5600.h"
 
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 
 #include "I2Cdev.h"
 #include "NVSManager.h"
-#include "constants.h"
-
-// File-local conversion: the shared header avoids RAD_TO_DEG because
-// vt-linalg's standard_constants.h defines it as a macro.
-static constexpr float RAD_TO_DEG = 180.0f / M_PI;
 
 static const char * TAG = "AS5600";
 
@@ -33,7 +29,6 @@ AS5600::AS5600(adc_channel_t channel,
                adc_bitwidth_t bitwidth)
 : ADC_BITWIDTH(bitwidth),
   m_channel(channel),
-  m_filter(std::make_unique<WheelKalmanFilter>()),
   m_cali_handle(cali_handle),
   m_is_voltage_calibrated(voltage_calibrated)
 {
@@ -165,11 +160,19 @@ esp_err_t AS5600::get_i2c_raw_angle(uint16_t * angle)
 }
 
 /**
- * @brief Processes an incoming raw ADC reading, applying oversampling and feeding the Kalman
- * filter.
+ * @brief Processes an incoming raw ADC reading, applying oversampling.
+ *
+ * Every OVERSAMPLE_COUNT readings the buffer is averaged and converted to the
+ * measured absolute angle. The driver reports raw measurements only; higher
+ * level estimation (filtering, velocity) is owned by the caller.
+ *
  * @param raw_adc_value Raw uint16_t coming directly from the ADC buffer.
+ * @param measured_angle_rad Output for the measured angle in radians, valid
+ *        only when the function returns true.
+ * @return true when an oversampling window completed and a new measurement
+ *         was produced.
  */
-void AS5600::process_new_reading(uint16_t raw_adc_value)
+bool AS5600::process_new_reading(uint16_t raw_adc_value, float * measured_angle_rad)
 {
     // Oversampling
     if (m_sampling_state.count < OVERSAMPLE_COUNT)
@@ -198,7 +201,7 @@ void AS5600::process_new_reading(uint16_t raw_adc_value)
                 m_max_voltage_mv.store(current_voltage_mv);
         }
 
-        float measured_angle_rad = 0.0f;
+        *measured_angle_rad = 0.0f;
         int cal_min = m_min_voltage_mv.load();
         int cal_max = m_max_voltage_mv.load();
         if (cal_max > cal_min)
@@ -206,20 +209,20 @@ void AS5600::process_new_reading(uint16_t raw_adc_value)
             int clamped_mv = std::clamp(current_voltage_mv, cal_min, cal_max);
             float ratio =
               static_cast<float>(clamped_mv - cal_min) / static_cast<float>(cal_max - cal_min);
-            measured_angle_rad = ratio * 2.0f * static_cast<float>(M_PI);
+            *measured_angle_rad = ratio * 2.0f * static_cast<float>(M_PI);
         }
         else
         {
             // Fallback if not calibrated: map raw value to angle
             const float max_raw = static_cast<float>((1 << ADC_BITWIDTH) - 1);
-            measured_angle_rad =
+            *measured_angle_rad =
               static_cast<float>(m_last_avg_value) * (2.0f * static_cast<float>(M_PI) / max_raw);
         }
 
-        // Update Kalman Filter
-        m_filter->update(measured_angle_rad);
         m_sampling_state.count = 0;
+        return true;
     }
+    return false;
 }
 
 /**
@@ -309,51 +312,6 @@ esp_err_t AS5600::load_calibration_from_nvs()
     }
 
     return ESP_ERR_NOT_FOUND;
-}
-
-/**
- * @brief Get the final filtered absolute angle in radians.
- * @return Angle (0.0 to 2PI)
- */
-float AS5600::get_angle_rad() const
-{
-    return m_filter->get_angle_rad();
-}
-
-/**
- * @brief Get the final filtered absolute angle in degrees.
- * @return Angle (0.0 to 360)
- */
-float AS5600::get_angle_deg() const
-{
-    return m_filter->get_angle_rad() * RAD_TO_DEG;
-}
-
-/**
- * @brief Get the filtered angular velocity in rad/s.
- * @return Angular velocity in radians per second.
- */
-float AS5600::get_velocity_rad_s() const
-{
-    return static_cast<float>(m_filter->get_velocity_rad_s());
-}
-
-/**
- * @brief Get the filtered rotational velocity in RPM.
- * @return Rotational velocity (Revolutions Per Minute).
- */
-float AS5600::get_rpm() const
-{
-    return get_velocity_rad_s() * RAD_S_TO_RPM;
-}
-
-/**
- * @brief Get the filtered rotational acceleration.
- * @return Acceleration (Radians Per Second Squared).
- */
-float AS5600::get_acceleration_rps2() const
-{
-    return static_cast<float>(m_filter->get_acceleration_rad_s2()) * RAD_S2_TO_RPS2;
 }
 
 /**
