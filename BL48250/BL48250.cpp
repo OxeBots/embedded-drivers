@@ -144,8 +144,10 @@ esp_err_t BL48250::configure(const MotorDriverConfig & config)
     {
         uint8_t direction_value = 0;
         for (uint8_t bit : direction_bits_) direction_value |= static_cast<uint8_t>(1U << bit);
+
         esp_err_t direction_err =
           direction_shift_register_->update_mask(direction_mask_, direction_value);
+
         if (direction_err != ESP_OK)
         {
             ESP_LOGE(TAG, "Failed to initialize motor direction outputs");
