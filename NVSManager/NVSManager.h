@@ -1,5 +1,5 @@
-#ifndef NVS_MANAGER_H
-#define NVS_MANAGER_H
+#ifndef _NVS_MANAGER_H_
+#define _NVS_MANAGER_H_
 
 #include <esp_err.h>
 #include <esp_log.h>
@@ -71,4 +71,4 @@ class NVSManager
     };
 };
 
-#endif  // NVS_MANAGER_H
+#endif  // _NVS_MANAGER_H_

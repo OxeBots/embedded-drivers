@@ -3,6 +3,8 @@
 
 #include <driver/gpio.h>
 #include <esp_err.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <stdint.h>
 
 class HC595
@@ -15,6 +17,15 @@ class HC595
         gpio_num_t latch_gpio;
         uint8_t device_key = DEFAULT_DEVICE_KEY;
         uint32_t clock_hz = 1000000;
+    };
+
+    // One output bit. Drivers that toggle a single pin (the radio CE line) call
+    // write() with the Pin as context, so they do not depend on this class.
+    struct Pin
+    {
+        HC595 * shift_register;
+        uint8_t mask;
+        static void write(void * context, uint8_t level);
     };
 
     HC595() = default;
@@ -30,6 +41,12 @@ class HC595
     Config m_config = {};
     uint8_t m_output = 0;
     bool m_initialized = false;
+    // Motor direction, the encoder mux and the radio CE all write the output
+    // byte from different tasks; the mutex keeps their updates atomic.
+    SemaphoreHandle_t m_mutex = nullptr;
+
+    // Shifts the full byte and pulses the latch. Caller must hold m_mutex.
+    esp_err_t write_locked(uint8_t value);
 };
 
 #endif  // _74HC595_H_

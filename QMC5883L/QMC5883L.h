@@ -1,5 +1,5 @@
-#ifndef QMC5883L_H
-#define QMC5883L_H
+#ifndef _QMC5883L_H_
+#define _QMC5883L_H_
 
 #include <esp_log.h>
 #include <esp_timer.h>
@@ -83,7 +83,7 @@ class QMC5883L
     void get_orientation(int16_t * x, int16_t * y, int16_t * z);
     int get_azimuth() const;
     uint8_t get_bearing(int azimuth) const;
-    void get_direction(char * myArray, int azimuth) const;
+    void get_direction(char * direction, int azimuth) const;
     uint8_t get_chip_id();
 
     // Calibration routines
@@ -158,4 +158,4 @@ class QMC5883L
                                     {'N', 'N', 'W'}};
 };
 
-#endif /* QMC5883L_H */
+#endif  // _QMC5883L_H_

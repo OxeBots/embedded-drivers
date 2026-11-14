@@ -445,16 +445,16 @@ uint8_t QMC5883L::get_bearing(int azimuth) const
 
 /**
  * @brief Retrieves a 3-character string representing the compass direction (e.g. "N  ", "NNE").
- * @param myArray Buffer to place the resulting string (must be at least 4 bytes).
+ * @param direction Buffer to place the resulting string (must be at least 4 bytes).
  * @param azimuth Calculated azimuth.
  */
-void QMC5883L::get_direction(char * myArray, int azimuth) const
+void QMC5883L::get_direction(char * direction, int azimuth) const
 {
     int d = get_bearing(azimuth);
-    myArray[0] = m_bearings[d][0];
-    myArray[1] = m_bearings[d][1];
-    myArray[2] = m_bearings[d][2];
-    myArray[3] = '\0';
+    direction[0] = m_bearings[d][0];
+    direction[1] = m_bearings[d][1];
+    direction[2] = m_bearings[d][2];
+    direction[3] = '\0';
 }
 
 /**

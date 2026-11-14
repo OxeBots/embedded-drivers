@@ -36,17 +36,19 @@ esp_err_t CD4052B::select(uint8_t channel)
     if (channel >= 4)
         return ESP_ERR_INVALID_ARG;
 
+    // The CD4052B inhibit input is active high. Select lines and inhibit are
+    // updated in one latch cycle, and update_mask() builds the new byte under
+    // the register lock so concurrent writers (direction bits, radio CE)
+    // cannot be clobbered.
     const uint8_t select_mask = static_cast<uint8_t>(
       (1U << m_config.select_a_bit) | (1U << m_config.select_b_bit) | (1U << m_config.inhibit_bit));
-    uint8_t value = m_shift_register->get_output() & ~select_mask;
+    uint8_t value = 0;
     if ((channel & 0x01U) != 0)
-        value |= static_cast<uint8_t>(1U << m_config.select_a_bit);
+        value = static_cast<uint8_t>(1U << m_config.select_a_bit);
     if ((channel & 0x02U) != 0)
         value |= static_cast<uint8_t>(1U << m_config.select_b_bit);
 
-    // The CD4052B inhibit input is active high. Include it in the same latch
-    // update so the selected AS5600 is never exposed during address changes.
-    esp_err_t err = m_shift_register->write(value);
+    esp_err_t err = m_shift_register->update_mask(select_mask, value);
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "Failed to select encoder channel %u", channel);

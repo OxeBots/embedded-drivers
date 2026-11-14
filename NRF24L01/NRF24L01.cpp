@@ -1,18 +1,24 @@
 #include "NRF24L01.h"
 
+#include <esp_err.h>
+#include <sdkconfig.h>
+
 static const char * TAG = "NRF24L01";
 
 /**
- * @brief Construct a new NRF24L01 object.
- * @param irq The GPIO pin number connected to the NRF24L01's IRQ pin.
+ * @brief Construct a radio with the given CE line.
+ * @param irq The GPIO pin connected to the NRF24L01's IRQ pin.
+ * @param ce  CE line: a GPIO or a virtual pin (e.g. a shift-register output).
  */
-NRF24L01::NRF24L01(gpio_num_t irq)
+NRF24L01::NRF24L01(gpio_num_t irq, NRF24_CePin ce)
 : m_irq_pin(irq),
+  m_ce(ce),
   m_task_handle(NULL),
   m_interrupt_queue(NULL),
   m_tx_queue(NULL),
   m_on_data_received(nullptr),
-  m_payload_size(32)
+  m_payload_size(32),
+  m_hw_ready(false)
 {
     memset(&m_dev, 0, sizeof(NRF24_t));
 }
@@ -34,6 +40,19 @@ NRF24L01::~NRF24L01()
 }
 
 /**
+ * @brief Registers the nRF24 on the shared SPI bus and brings the device up.
+ *
+ * SPIdev::init() must run first because it creates the shared bus. The mirf
+ * driver drives the CE line configured by the constructor.
+ */
+void NRF24L01::init_hw()
+{
+    Nrf24_init(&m_dev, m_ce);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    m_hw_ready = true;
+}
+
+/**
  * @brief Initializes the NRF24L01 module.
  * @param channel      RF Channel (0-125).
  * @param payload_size The fixed payload size (1-32 bytes).
@@ -46,10 +65,13 @@ esp_err_t NRF24L01::init(uint8_t channel,
                          const char * tx_addr,
                          const char * rx_addr)
 {
-    m_payload_size = payload_size;
+    if (!m_hw_ready)
+    {
+        ESP_LOGE(TAG, "init() called before init_hw()");
+        return ESP_ERR_INVALID_STATE;
+    }
 
-    Nrf24_init(&m_dev);
-    vTaskDelay(pdMS_TO_TICKS(100));
+    m_payload_size = payload_size;
 
     Nrf24_config(&m_dev, channel, m_payload_size);
 
@@ -90,7 +112,10 @@ esp_err_t NRF24L01::init(uint8_t channel,
     m_interrupt_queue = xQueueCreate(10, sizeof(uint32_t));
     m_tx_queue = xQueueCreate(10, m_payload_size * sizeof(uint8_t));
     if (m_interrupt_queue == NULL || m_tx_queue == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to create the receiver and TX queues");
         return ESP_FAIL;
+    }
 
     gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_NEGEDGE;
@@ -101,7 +126,10 @@ esp_err_t NRF24L01::init(uint8_t channel,
 
     ret = gpio_config(&io_conf);
     if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to configure the IRQ GPIO: %s", esp_err_to_name(ret));
         return ret;
+    }
 
     // The IRQ handler is negative-edge triggered. If RX_DR (or any other
     // interrupt flag) was already latched during init — e.g. a packet arrived
@@ -115,7 +143,10 @@ esp_err_t NRF24L01::init(uint8_t channel,
     // gpio_install_isr_service() must be called in main.cpp before this.
     ret = gpio_isr_handler_add(m_irq_pin, NRF24L01::isr_handler, (void *)this);
     if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to register the IRQ handler: %s", esp_err_to_name(ret));
         return ret;
+    }
 
     // A packet arriving in the window between clearing STATUS and registering
     // the handler would again be missed. If the line is already low, push one
@@ -131,14 +162,19 @@ esp_err_t NRF24L01::init(uint8_t channel,
 
 /**
  * @brief Starts the background receiver task.
- * @param callback Called with raw bytes whenever a packet arrives.
+ * @param callback Called with a DataReceivedEvent whenever a packet arrives.
+ * @param context Stored in the event so the callback can recover its owner.
  * @return true if the task started successfully.
  */
-bool NRF24L01::start(data_received_callback_t callback)
+bool NRF24L01::start(data_received_callback_t callback, void * context)
 {
     if (!callback)
+    {
+        ESP_LOGE(TAG, "No data-received callback configured");
         return false;
+    }
     m_on_data_received = callback;
+    m_callback_context = context;
 
     BaseType_t task_created =
       xTaskCreate(&NRF24L01::task_wrapper, "nrf24_receiver_task", 4096, this, 5, &m_task_handle);
@@ -151,8 +187,11 @@ bool NRF24L01::start(data_received_callback_t callback)
 void IRAM_ATTR NRF24L01::isr_handler(void * dev)
 {
     auto * instance = static_cast<NRF24L01 *>(dev);
-    uint32_t gpio_num = instance->m_irq_pin;
-    xQueueSendFromISR(instance->m_interrupt_queue, &gpio_num, NULL);
+    uint32_t gpio_num = static_cast<uint32_t>(instance->m_irq_pin);
+    BaseType_t woken = pdFALSE;
+    xQueueSendFromISR(instance->m_interrupt_queue, &gpio_num, &woken);
+    // Wake the receiver task now instead of at the next 10 ms tick.
+    portYIELD_FROM_ISR(woken);
 }
 
 /**
@@ -180,40 +219,51 @@ void NRF24L01::receiver_task()
 
     while (true)
     {
-        if (xQueueReceive(m_interrupt_queue, &io_num, portMAX_DELAY))
+        // Normal path wakes on the radio IRQ. The timeout is a safety net for
+        // a TX completion whose falling edge was masked by an already-latched
+        // RX_DR, and for frames queued by a task other than this one.
+        const bool signalled =
+          xQueueReceive(m_interrupt_queue, &io_num, pdMS_TO_TICKS(10)) == pdTRUE;
+        if (signalled && io_num != static_cast<uint32_t>(m_irq_pin))
+            continue;
+
+        // TX_DS and MAX_RT also pull IRQ low. Acknowledge the event and put
+        // the radio back into RX mode. Doing this from the interrupt instead
+        // of polling Nrf24_isSend() — which sleeps a full FreeRTOS tick at
+        // 100 Hz — keeps the post-reply deaf window at the air time.
+        if (m_dev.PTX)
         {
-            if (io_num == static_cast<uint32_t>(m_irq_pin))
+            const uint8_t tx_status = Nrf24_getStatus(&m_dev);
+            if (tx_status & ((1 << TX_DS) | (1 << MAX_RT)))
+                Nrf24_powerUpRx(&m_dev);
+        }
+
+        if (!signalled)
+            continue;
+
+        // Drain all pending RX packets
+        while (Nrf24_dataReady(&m_dev))
+        {
+            Nrf24_getData(&m_dev, buffer);
+
+            // byte 0 is the dongle's payload-length prefix
+            uint8_t payload_len = buffer[0];
+
+            if (payload_len > 0 && payload_len <= 31 && m_on_data_received)
             {
-                // Drain all pending RX packets
-                while (Nrf24_dataReady(&m_dev))
-                {
-                    Nrf24_getData(&m_dev, buffer);
-
-                    // byte 0 is the dongle's payload-length prefix
-                    uint8_t payload_len = buffer[0];
-
-                    if (payload_len > 0 && payload_len <= 31 && m_on_data_received)
-                    {
-                        // Deliver raw bytes starting after the length byte
-                        m_on_data_received(&buffer[1], payload_len);
-                    }
-                    else
-                    {
-                        ESP_LOGW(TAG, "Dropped packet — invalid length byte: %d", payload_len);
-                    }
-                }
-
-                // Flush queued TX frames
-                while (xQueueReceive(m_tx_queue, &tx_buffer, 0))
-                {
-                    Nrf24_send(&m_dev, tx_buffer);
-                    if (!Nrf24_isSend(&m_dev, 100))
-                        ESP_LOGW(TAG, "TX sent (no Auto-ACK from USB adapter)");
-                    else
-                        ESP_LOGI(TAG, "TX sent and ACKed by USB adapter");
-                }
+                // Deliver raw bytes starting after the length byte
+                DataReceivedEvent event = {m_callback_context, &buffer[1], payload_len};
+                m_on_data_received(&event);
+            }
+            else
+            {
+                ESP_LOGW(TAG, "Dropped packet — invalid length byte: %d", payload_len);
             }
         }
+
+        // Flush queued TX frames. Completion is handled by the IRQ branch
+        // above, so the receiver task never blocks on the air.
+        while (xQueueReceive(m_tx_queue, &tx_buffer, 0)) Nrf24_send(&m_dev, tx_buffer);
     }
 }
 

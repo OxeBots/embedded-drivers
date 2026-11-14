@@ -1,11 +1,12 @@
-#ifndef ITG3200_H
-#define ITG3200_H
+#ifndef _ITG3200_H_
+#define _ITG3200_H_
 
-#include <I2Cdev.h>
 #include <esp_err.h>
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+
+#include "I2Cdev.h"
 
 class ITG3200
 {
@@ -159,4 +160,4 @@ class ITG3200
     int16_t m_z_offset = 0;
 };
 
-#endif /* ITG3200_H */
+#endif  // _ITG3200_H_

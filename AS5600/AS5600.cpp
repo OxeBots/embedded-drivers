@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <numeric>
 
 #include "I2Cdev.h"
 #include "NVSManager.h"
@@ -152,6 +151,24 @@ esp_err_t AS5600::get_i2c_raw_angle(uint16_t * angle)
     if (!m_i2c_initialized)
         return ESP_ERR_INVALID_STATE;
 
+    return read_raw_angle(angle);
+}
+
+/**
+ * @brief Reads the raw magnetic angle over I2C without per-instance state.
+ *
+ * The caller must have routed this encoder onto the bus first (for example by
+ * selecting its CD4052B channel). Used by the wiring calibration, which polls
+ * every encoder position while a motor spins.
+ *
+ * @param angle Output for the 12-bit raw angle (0..4095).
+ * @return ESP_OK on success, ESP_FAIL when the read fails.
+ */
+esp_err_t AS5600::read_raw_angle(uint16_t * angle)
+{
+    if (angle == nullptr)
+        return ESP_ERR_INVALID_ARG;
+
     if (I2Cdev::readWord(AS5600_ADDR, static_cast<uint8_t>(Register::RAW_ANGLE_H), angle) != 0)
         return ESP_FAIL;
 
@@ -160,69 +177,52 @@ esp_err_t AS5600::get_i2c_raw_angle(uint16_t * angle)
 }
 
 /**
- * @brief Processes an incoming raw ADC reading, applying oversampling.
+ * @brief Converts one published raw ADC block mean into the absolute angle.
  *
- * Every OVERSAMPLE_COUNT readings the buffer is averaged and converted to the
- * measured absolute angle. The driver reports raw measurements only; higher
- * level estimation (filtering, velocity) is owned by the caller.
+ * The ADC stream owns the oversampling and hands over one block mean
+ * per dispatch; this driver only reports the raw measurement and leaves the
+ * higher level estimation (filtering, velocity) to the caller.
  *
- * @param raw_adc_value Raw uint16_t coming directly from the ADC buffer.
- * @param measured_angle_rad Output for the measured angle in radians, valid
- *        only when the function returns true.
- * @return true when an oversampling window completed and a new measurement
- *         was produced.
+ * @param raw_adc_value Raw block mean delivered by the ADC stream.
+ * @param measured_angle_rad Output for the measured angle in radians.
  */
-bool AS5600::process_new_reading(uint16_t raw_adc_value, float * measured_angle_rad)
+void AS5600::process_new_reading(uint16_t raw_adc_value, float * measured_angle_rad)
 {
-    // Oversampling
-    if (m_sampling_state.count < OVERSAMPLE_COUNT)
-        m_sampling_state.samples[m_sampling_state.count++] = raw_adc_value;
+    m_last_avg_value = raw_adc_value;
 
-    // When the sampling buffer is full, process the data
-    if (m_sampling_state.count >= OVERSAMPLE_COUNT)
+    // Convert to Angle
+    int current_voltage_mv = 0;
+    if (m_is_voltage_calibrated)
+        adc_cali_raw_to_voltage(m_cali_handle, m_last_avg_value, &current_voltage_mv);
+
+    if (m_is_calibrating.load())
     {
-        uint32_t sum =
-          std::accumulate(m_sampling_state.samples.begin(), m_sampling_state.samples.end(), 0u);
-        m_last_avg_value = sum / OVERSAMPLE_COUNT;
-
-        // Convert to Angle
-        int current_voltage_mv = 0;
-        if (m_is_voltage_calibrated)
-            adc_cali_raw_to_voltage(m_cali_handle, m_last_avg_value, &current_voltage_mv);
-
-        if (m_is_calibrating.load())
-        {
-            // If we are calibrating, we need to update the min/max voltage range
-            int current_min = m_min_voltage_mv.load();
-            int current_max = m_max_voltage_mv.load();
-            if (current_voltage_mv < current_min)
-                m_min_voltage_mv.store(current_voltage_mv);
-            if (current_voltage_mv > current_max)
-                m_max_voltage_mv.store(current_voltage_mv);
-        }
-
-        *measured_angle_rad = 0.0f;
-        int cal_min = m_min_voltage_mv.load();
-        int cal_max = m_max_voltage_mv.load();
-        if (cal_max > cal_min)
-        {
-            int clamped_mv = std::clamp(current_voltage_mv, cal_min, cal_max);
-            float ratio =
-              static_cast<float>(clamped_mv - cal_min) / static_cast<float>(cal_max - cal_min);
-            *measured_angle_rad = ratio * 2.0f * static_cast<float>(M_PI);
-        }
-        else
-        {
-            // Fallback if not calibrated: map raw value to angle
-            const float max_raw = static_cast<float>((1 << ADC_BITWIDTH) - 1);
-            *measured_angle_rad =
-              static_cast<float>(m_last_avg_value) * (2.0f * static_cast<float>(M_PI) / max_raw);
-        }
-
-        m_sampling_state.count = 0;
-        return true;
+        // If we are calibrating, we need to update the min/max voltage range
+        int current_min = m_min_voltage_mv.load();
+        int current_max = m_max_voltage_mv.load();
+        if (current_voltage_mv < current_min)
+            m_min_voltage_mv.store(current_voltage_mv);
+        if (current_voltage_mv > current_max)
+            m_max_voltage_mv.store(current_voltage_mv);
     }
-    return false;
+
+    *measured_angle_rad = 0.0f;
+    int cal_min = m_min_voltage_mv.load();
+    int cal_max = m_max_voltage_mv.load();
+    if (cal_max > cal_min)
+    {
+        int clamped_mv = std::clamp(current_voltage_mv, cal_min, cal_max);
+        float ratio =
+          static_cast<float>(clamped_mv - cal_min) / static_cast<float>(cal_max - cal_min);
+        *measured_angle_rad = ratio * 2.0f * static_cast<float>(M_PI);
+    }
+    else
+    {
+        // Fallback if not calibrated: map raw value to angle
+        const float max_raw = static_cast<float>((1 << ADC_BITWIDTH) - 1);
+        *measured_angle_rad =
+          static_cast<float>(m_last_avg_value) * (2.0f * static_cast<float>(M_PI) / max_raw);
+    }
 }
 
 /**

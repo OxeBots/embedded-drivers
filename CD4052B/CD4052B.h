@@ -1,5 +1,5 @@
-#ifndef CD4052B_H
-#define CD4052B_H
+#ifndef _CD4052B_H_
+#define _CD4052B_H_
 
 #include <esp_err.h>
 #include <stdint.h>
@@ -32,4 +32,4 @@ class CD4052B
     bool m_enabled = false;
 };
 
-#endif  // CD4052B_H
+#endif  // _CD4052B_H_

@@ -127,8 +127,29 @@ uint8_t VL53L5CX::set_ranging_frequency(uint8_t frequency_hz)
     return vl53l5cx_set_ranging_frequency_hz(&m_dev, frequency_hz);
 }
 
+uint8_t VL53L5CX::set_ranging_mode(uint8_t mode)
+{
+    if (!m_initialized || m_ranging)
+        return VL53L5CX_STATUS_ERROR;
+    return vl53l5cx_set_ranging_mode(&m_dev, mode);
+}
+
+uint8_t VL53L5CX::set_target_order(uint8_t order)
+{
+    if (!m_initialized || m_ranging)
+        return VL53L5CX_STATUS_ERROR;
+    return vl53l5cx_set_target_order(&m_dev, order);
+}
+
+uint8_t VL53L5CX::set_sharpener_percent(uint8_t percent)
+{
+    if (!m_initialized || m_ranging)
+        return VL53L5CX_STATUS_ERROR;
+    return vl53l5cx_set_sharpener_percent(&m_dev, percent);
+}
+
 /**
- * @brief Starts continuous ranging.
+ * @brief Starts ranging with the selected mode and settings.
  * @return VL53L5CX_STATUS_OK on success.
  */
 uint8_t VL53L5CX::start_ranging()

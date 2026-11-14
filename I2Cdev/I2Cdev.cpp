@@ -41,9 +41,10 @@
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <sdkconfig.h>
 #include <string.h>
 
-#include "sdkconfig.h"
+static const char * TAG = "I2Cdev";
 
 #define I2C_NUM I2C_NUM_0
 
@@ -90,7 +91,7 @@ i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t devAddr, uint32_t scl_
 
     if (cached_count >= I2CDEV_MAX_CACHED_DEVICES)
     {
-        ESP_LOGE("I2Cdev", "Device cache full! Increase I2CDEV_MAX_CACHED_DEVICES");
+        ESP_LOGE(TAG, "Device cache full! Increase I2CDEV_MAX_CACHED_DEVICES");
         return NULL;
     }
 
@@ -107,7 +108,7 @@ i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t devAddr, uint32_t scl_
 
     if (ret != ESP_OK)
     {
-        ESP_LOGE("I2Cdev", "Failed to add device 0x%02x: %s", devAddr, esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Failed to add device 0x%02x: %s", devAddr, esp_err_to_name(ret));
         return NULL;
     }
 

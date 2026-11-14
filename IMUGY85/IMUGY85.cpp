@@ -67,11 +67,18 @@ esp_err_t IMUGY85::init()
     m_mag.init();
     if (!m_mag.test_connection())
     {
-        ESP_LOGE(TAG, "QMC5883L magnetometer was not detected.");
-        return ESP_ERR_NOT_FOUND;
+        // The AHRS fuses accelerometer and gyroscope only, so a missing
+        // magnetometer must not fail the whole IMU. Reads return zeros until
+        // the sensor answers.
+        m_mag_available = false;
+        ESP_LOGW(TAG, "QMC5883L magnetometer was not detected (optional sensor).");
     }
-    m_mag.set_smoothing(10, true);
-    ESP_LOGI(TAG, "QMC5883L magnetometer initialized.");
+    else
+    {
+        m_mag_available = true;
+        m_mag.set_smoothing(10, true);
+        ESP_LOGI(TAG, "QMC5883L magnetometer initialized.");
+    }
 
     // ---- Calculate resolutions ----
     update_a_res();
@@ -91,7 +98,10 @@ esp_err_t IMUGY85::init()
     interrupt_config.pull_down_en = GPIO_PULLDOWN_DISABLE;
     err = gpio_config(&interrupt_config);
     if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to configure IMU interrupt pins: %s", esp_err_to_name(err));
         return err;
+    }
 
     m_initialized = true;
 
@@ -106,6 +116,11 @@ i2c_master_bus_handle_t IMUGY85::get_i2c_bus() const
 bool IMUGY85::is_initialized() const
 {
     return m_initialized;
+}
+
+bool IMUGY85::is_mag_available() const
+{
+    return m_mag_available;
 }
 
 /**
@@ -179,6 +194,9 @@ Vector3f IMUGY85::read_gyro_calibrated()
  */
 Vector3f IMUGY85::read_magnetometer_calibrated()
 {
+    if (!m_mag_available)
+        return {0.0f, 0.0f, 0.0f};
+
     int16_t raw_x, raw_y, raw_z;
     read_magnetometer(&raw_x, &raw_y, &raw_z);
 

@@ -1,6 +1,11 @@
 /**
  * @file 74HC595.cpp
  * @brief Driver for the SPI-connected 74HC595 output shift register.
+ *
+ * The eight outputs are shared by independent tasks (motor direction from the
+ * control task, encoder mux selection from the estimator task, and the radio
+ * CE line from the receiver task), so every write and read-modify-write is
+ * serialized with a mutex.
  */
 
 #include "74HC595.h"
@@ -23,24 +28,22 @@ esp_err_t HC595::init(const Config & config, uint8_t initial_value)
     spi_device_interface_config_t device_config = {};
     device_config.clock_speed_hz = static_cast<int>(config.clock_hz);
     device_config.mode = 0;
-    device_config.spics_io_num = -1;
+    device_config.spics_io_num = -1;  // overridden: SPIdev wires the latch as chip select
     device_config.queue_size = 1;
     device_config.flags = SPI_DEVICE_NO_DUMMY;
 
-    if (!SPIdev::register_device(config.device_key, &device_config))
+    if (!SPIdev::register_device(config.device_key, config.latch_gpio, &device_config))
     {
         ESP_LOGE(TAG, "Failed to register 74HC595 on SPI device key %u", config.device_key);
         return ESP_FAIL;
     }
 
-    gpio_reset_pin(config.latch_gpio);
-    esp_err_t err = gpio_set_direction(config.latch_gpio, GPIO_MODE_OUTPUT);
-    if (err != ESP_OK)
-        return err;
-
-    err = gpio_set_level(config.latch_gpio, 0);
-    if (err != ESP_OK)
-        return err;
+    m_mutex = xSemaphoreCreateMutex();
+    if (m_mutex == nullptr)
+    {
+        ESP_LOGE(TAG, "Failed to create the output access mutex");
+        return ESP_ERR_NO_MEM;
+    }
 
     m_config = config;
     m_initialized = true;
@@ -52,24 +55,26 @@ esp_err_t HC595::write(uint8_t value)
     if (!m_initialized)
         return ESP_ERR_INVALID_STATE;
 
-    if (!SPIdev::write(m_config.device_key, &value, 1))
-        return ESP_FAIL;
+    if (xSemaphoreTake(m_mutex, portMAX_DELAY) != pdTRUE)
+        return ESP_ERR_TIMEOUT;
 
-    // The storage register is updated on the rising latch edge. Keep the
-    // pulse short so motor direction and mux selection change atomically.
-    esp_err_t err = gpio_set_level(m_config.latch_gpio, 1);
-    if (err != ESP_OK)
-        return err;
-    err = gpio_set_level(m_config.latch_gpio, 0);
-    if (err == ESP_OK)
-        m_output = value;
+    esp_err_t err = write_locked(value);
+    xSemaphoreGive(m_mutex);
     return err;
 }
 
 esp_err_t HC595::update_mask(uint8_t mask, uint8_t value)
 {
+    if (!m_initialized)
+        return ESP_ERR_INVALID_STATE;
+
+    if (xSemaphoreTake(m_mutex, portMAX_DELAY) != pdTRUE)
+        return ESP_ERR_TIMEOUT;
+
     const uint8_t next = static_cast<uint8_t>((m_output & ~mask) | (value & mask));
-    return write(next);
+    esp_err_t err = write_locked(next);
+    xSemaphoreGive(m_mutex);
+    return err;
 }
 
 uint8_t HC595::get_output() const
@@ -80,4 +85,31 @@ uint8_t HC595::get_output() const
 bool HC595::is_initialized() const
 {
     return m_initialized;
+}
+
+/**
+ * @brief Writes one output bit, keeping every other output untouched.
+ *
+ * This is the pin-write callback a driver uses to toggle a single output (the
+ * radio CE line): the full byte is shifted again with only that bit changed.
+ * @param context The Pin describing the output bit.
+ * @param level 1 sets the bit, 0 clears it.
+ */
+void HC595::Pin::write(void * context, uint8_t level)
+{
+    auto * pin = static_cast<Pin *>(context);
+    const uint8_t value = level ? pin->mask : 0;
+    if (pin->shift_register->update_mask(pin->mask, value) != ESP_OK)
+        ESP_LOGE(TAG, "Failed to write output bit 0x%02X", pin->mask);
+}
+
+esp_err_t HC595::write_locked(uint8_t value)
+{
+    // The latch is the device chip select: the peripheral holds it low while
+    // the byte shifts in and raises it after the last bit, which updates the
+    // storage register in one atomic bus transaction.
+    if (!SPIdev::write(m_config.device_key, &value, 1))
+        return ESP_FAIL;
+    m_output = value;
+    return ESP_OK;
 }

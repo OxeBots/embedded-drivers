@@ -1,6 +1,7 @@
-#ifndef SPIDEV_H
-#define SPIDEV_H
+#ifndef _SPIDEV_H_
+#define _SPIDEV_H_
 
+#include <driver/gpio.h>
 #include <driver/spi_master.h>
 #include <esp_err.h>
 #include <freertos/FreeRTOS.h>
@@ -9,13 +10,11 @@
 #include <stdint.h>
 
 #define SPIDEV_MAX_CACHED_DEVICES 8
-#define SPIDEV_DEFAULT_CLOCK_SPEED 1000000
 
 typedef struct
 {
     uint8_t device_key;
     spi_device_handle_t handle;
-    bool has_config;
     spi_device_interface_config_t config;
 } spi_dev_cache_entry_t;
 
@@ -24,12 +23,18 @@ class SPIdev
    public:
     SPIdev() = default;
 
-    // The caller owns and initializes the SPI bus before this call.
-    static void init(spi_host_device_t host_id);
+    // Creates the shared SPI bus from the sdkconfig pins and host selection,
+    // and resets the device registry. Drivers only register devices on the
+    // bus after this call. Mirrors I2Cdev::init() as the single bus owner.
+    static void init();
 
-    // Register a device before its first transaction. The key is a software
-    // identifier and does not have to be a chip-select GPIO.
+    // Registers a device before its first transaction. The chip select is
+    // part of the device: SPIdev wires cs_gpio into the peripheral config so
+    // every transaction asserts it before the first bit and releases it
+    // after the last one (the 74HC595 latch and the radio CSN both work this
+    // way). Pass GPIO_NUM_NC for a device without a chip select.
     static bool register_device(uint8_t device_key,
+                                gpio_num_t cs_gpio,
                                 const spi_device_interface_config_t * dev_config);
 
     static bool is_initialized();
@@ -52,4 +57,4 @@ class SPIdev
                                          size_t length);
 };
 
-#endif  // SPIDEV_H
+#endif  // _SPIDEV_H_

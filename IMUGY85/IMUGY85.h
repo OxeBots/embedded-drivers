@@ -1,5 +1,5 @@
-#ifndef IMUGY85_H
-#define IMUGY85_H
+#ifndef _IMUGY85_H_
+#define _IMUGY85_H_
 
 #include <driver/i2c_master.h>
 #include <esp_log.h>
@@ -25,6 +25,7 @@ class IMUGY85
     esp_err_t init();
     i2c_master_bus_handle_t get_i2c_bus() const;
     bool is_initialized() const;
+    bool is_mag_available() const;
 
     void read_acceleration(int16_t * x, int16_t * y, int16_t * z);
 
@@ -73,6 +74,7 @@ class IMUGY85
     float m_g_res = 0.0f;
     float m_m_res = 0.0f;
     bool m_initialized = false;
+    bool m_mag_available = false;
 
     void update_a_res();
     void update_g_res();

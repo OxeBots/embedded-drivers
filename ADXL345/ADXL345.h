@@ -1,12 +1,13 @@
-#ifndef ADXL345_H
-#define ADXL345_H
+#ifndef _ADXL345_H_
+#define _ADXL345_H_
 
-#include <I2Cdev.h>
 #include <esp_err.h>
 #include <esp_log.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+
+#include "I2Cdev.h"
 
 class ADXL345
 {
@@ -325,4 +326,4 @@ class ADXL345
     float m_cal_scale[3] = {1.F, 1.F, 1.F};
 };
 
-#endif /* ADXL345_H */
+#endif  // _ADXL345_H_

@@ -1,5 +1,5 @@
-#ifndef AS5600_H
-#define AS5600_H
+#ifndef _AS5600_H_
+#define _AS5600_H_
 
 #include <esp_adc/adc_cali.h>
 #include <esp_adc/adc_cali_scheme.h>
@@ -60,9 +60,13 @@ class AS5600
 
     esp_err_t read_configuration(OutputStage * stage, SlowFilter * slow, FastFilter * fast);
     esp_err_t get_i2c_raw_angle(uint16_t * angle);
+    // Reads the raw angle register over I2C without per-instance state; the
+    // caller must have routed this encoder onto the bus first (CD4052B mux).
+    static esp_err_t read_raw_angle(uint16_t * angle);
 
-    // Analog methods
-    bool process_new_reading(uint16_t raw_adc_value, float * measured_angle_rad);
+    // Analog methods: converts one published raw block mean (the ADC stream
+    // owns the oversampling) into the absolute angle.
+    void process_new_reading(uint16_t raw_adc_value, float * measured_angle_rad);
     esp_err_t calibrate_range(uint32_t duration_ms);
     esp_err_t set_calibration_range(int min_mv = 0, int max_mv = 3300);
 
@@ -100,14 +104,7 @@ class AS5600
 
     const adc_bitwidth_t ADC_BITWIDTH;
     static constexpr int MIN_VALID_VOLTAGE_RANGE_MV = 500;
-    static constexpr size_t OVERSAMPLE_COUNT = 16;
     static constexpr const char * NVS_NS = "wheel_calib";
-
-    struct SamplingState
-    {
-        std::array<uint16_t, OVERSAMPLE_COUNT> samples;
-        size_t count = 0;
-    };
 
     adc_channel_t m_channel;
 
@@ -117,8 +114,7 @@ class AS5600
     std::atomic<int> m_min_voltage_mv{5000};
     std::atomic<int> m_max_voltage_mv{0};
 
-    SamplingState m_sampling_state;
     uint16_t m_last_avg_value = 0;
 };
 
-#endif  // AS5600_H
+#endif  // _AS5600_H_
