@@ -238,32 +238,41 @@ void NRF24L01::receiver_task()
                 Nrf24_powerUpRx(&m_dev);
         }
 
-        if (!signalled)
-            continue;
-
-        // Drain all pending RX packets
-        while (Nrf24_dataReady(&m_dev))
+        if (signalled)
         {
-            Nrf24_getData(&m_dev, buffer);
-
-            // byte 0 is the dongle's payload-length prefix
-            uint8_t payload_len = buffer[0];
-
-            if (payload_len > 0 && payload_len <= 31 && m_on_data_received)
+            // Drain all pending RX packets
+            while (Nrf24_dataReady(&m_dev))
             {
-                // Deliver raw bytes starting after the length byte
-                DataReceivedEvent event = {m_callback_context, &buffer[1], payload_len};
-                m_on_data_received(&event);
-            }
-            else
-            {
-                ESP_LOGW(TAG, "Dropped packet — invalid length byte: %d", payload_len);
+                Nrf24_getData(&m_dev, buffer);
+
+                // byte 0 is the dongle's payload-length prefix
+                uint8_t payload_len = buffer[0];
+
+                if (payload_len > 0 && payload_len <= 31 && m_on_data_received)
+                {
+                    // Deliver raw bytes starting after the length byte
+                    DataReceivedEvent event = {m_callback_context, &buffer[1], payload_len};
+                    m_on_data_received(&event);
+                }
+                else
+                {
+                    ESP_LOGW(TAG, "Dropped packet — invalid length byte: %d", payload_len);
+                }
             }
         }
 
-        // Flush queued TX frames. Completion is handled by the IRQ branch
-        // above, so the receiver task never blocks on the air.
-        while (xQueueReceive(m_tx_queue, &tx_buffer, 0)) Nrf24_send(&m_dev, tx_buffer);
+        // Send at most one queued TX frame while the radio is in RX mode.
+        // Completion is handled by the IRQ branch above, so the receiver task
+        // never busy-waits on the air. Running outside the `if (signalled)`
+        // guard ensures the 10 ms safety timeout also flushes frames queued by
+        // other tasks.
+        if (!m_dev.PTX && xQueueReceive(m_tx_queue, &tx_buffer, 0) == pdTRUE)
+        {
+            // Wait 5 ms for the USB dongle to finish its transmit status output
+            // over serial and switch back to receive mode before replying.
+            vTaskDelay(pdMS_TO_TICKS(5));
+            Nrf24_send(&m_dev, tx_buffer);
+        }
     }
 }
 
