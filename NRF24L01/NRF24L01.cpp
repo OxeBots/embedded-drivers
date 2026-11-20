@@ -1,6 +1,7 @@
 #include "NRF24L01.h"
 
 #include <esp_err.h>
+#include <esp_timer.h>
 #include <sdkconfig.h>
 
 static const char * TAG = "NRF24L01";
@@ -105,6 +106,17 @@ esp_err_t NRF24L01::init(uint8_t channel,
 
     Nrf24_setRetransmitCount(&m_dev, CONFIG_RETRANSMIT_COUNT);
     Nrf24_setRetransmitDelay(&m_dev, CONFIG_RETRANSMIT_DELAY);
+
+    // Keep only Pipe 1 enabled while idle in receive mode so robots do not
+    // listen to Pipe 0 (the base station receive address) and answer other
+    // robots' telemetry with false or colliding acknowledgements. Pipe 0 is
+    // re-enabled only while transmitting so the radio still receives the base
+    // station's acknowledgement. Keep automatic acknowledgement enabled on both
+    // pipes because the dongle always transmits Enhanced ShockBurst frames
+    // (clearing Pipe 1 here drops the 9-bit packet control field and corrupts
+    // the payload alignment).
+    Nrf24_configRegister(&m_dev, EN_RXADDR, (1 << ERX_P1));
+    Nrf24_configRegister(&m_dev, EN_AA, (1 << ENAA_P0) | (1 << ENAA_P1));
 
     ESP_LOGI(TAG, "NRF24L01 Receiver Initialized:");
     Nrf24_printDetails(&m_dev);
@@ -227,20 +239,7 @@ void NRF24L01::receiver_task()
         if (signalled && io_num != static_cast<uint32_t>(m_irq_pin))
             continue;
 
-        // TX_DS and MAX_RT also pull IRQ low. Acknowledge the event and put
-        // the radio back into RX mode. Doing this from the interrupt instead
-        // of polling Nrf24_isSend() — which sleeps a full FreeRTOS tick at
-        // 100 Hz — keeps the post-reply deaf window at the air time.
-        if (m_dev.PTX)
-        {
-            const uint8_t tx_status = Nrf24_getStatus(&m_dev);
-            if (tx_status & ((1 << TX_DS) | (1 << MAX_RT)))
-                Nrf24_powerUpRx(&m_dev);
-        }
-
-        if (signalled)
-        {
-            // Drain all pending RX packets
+        auto drain_rx = [&]() {
             while (Nrf24_dataReady(&m_dev))
             {
                 Nrf24_getData(&m_dev, buffer);
@@ -259,18 +258,48 @@ void NRF24L01::receiver_task()
                     ESP_LOGW(TAG, "Dropped packet — invalid length byte: %d", payload_len);
                 }
             }
+        };
+
+        // Transmit complete and retry-limit interrupts also pull the interrupt
+        // line low. Return to receive mode with Pipe 0 disabled so this robot
+        // never acknowledges another robot's uplink frames.
+        if (m_dev.PTX)
+        {
+            const uint8_t tx_status = Nrf24_getStatus(&m_dev);
+            if (tx_status & ((1 << TX_DS) | (1 << MAX_RT)))
+            {
+                Nrf24_configRegister(&m_dev, EN_RXADDR, (1 << ERX_P1));
+                Nrf24_powerUpRx(&m_dev);
+            }
         }
 
-        // Send at most one queued TX frame while the radio is in RX mode.
-        // Completion is handled by the IRQ branch above, so the receiver task
-        // never busy-waits on the air. Running outside the `if (signalled)`
-        // guard ensures the 10 ms safety timeout also flushes frames queued by
-        // other tasks.
+        // Drain pending receive packets on every wakeup while not transmitting
+        // so a latched receive interrupt can never stall the edge-triggered line.
+        if (!m_dev.PTX)
+            drain_rx();
+
+        // Send at most one queued transmit frame while the radio is in receive
+        // mode. Completion is handled by the interrupt branch above.
         if (!m_dev.PTX && xQueueReceive(m_tx_queue, &tx_buffer, 0) == pdTRUE)
         {
-            // Wait 5 ms for the USB dongle to finish its transmit status output
-            // over serial and switch back to receive mode before replying.
-            vTaskDelay(pdMS_TO_TICKS(5));
+            // Wait at least 5 ms for the dongle to finish its transmit cycle
+            // and return to receive mode before replying. At 100 Hz tick rate,
+            // pdMS_TO_TICKS(5) truncates to zero, so sleep full ticks until
+            // 5 ms have actually elapsed.
+            const int64_t wait_start_us = esp_timer_get_time();
+            do
+            {
+                vTaskDelay(1);
+            } while ((esp_timer_get_time() - wait_start_us) < 5000);
+
+            // Clear any duplicate downlink retransmissions that arrived during
+            // the wait so the interrupt line returns high before transmitting.
+            drain_rx();
+
+            // Enable Pipe 0 only while in transmit mode (with chip enable low)
+            // so the radio can receive the base station's acknowledgement.
+            Nrf24_ceLow(&m_dev);
+            Nrf24_configRegister(&m_dev, EN_RXADDR, (1 << ERX_P0) | (1 << ERX_P1));
             Nrf24_send(&m_dev, tx_buffer);
         }
     }
