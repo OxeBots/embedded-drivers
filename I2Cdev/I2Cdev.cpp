@@ -128,8 +128,11 @@ i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t dev_addr, uint32_t scl
  * @return ESP_OK on success, error code otherwise
  */
 
-esp_err_t I2Cdev::perform_transaction(
-  uint8_t devAddr, uint8_t * write_buffer, size_t write_len, uint8_t * read_buffer, size_t read_len)
+esp_err_t I2Cdev::perform_transaction(uint8_t dev_addr,
+                                      uint8_t * write_buffer,
+                                      size_t write_len,
+                                      uint8_t * read_buffer,
+                                      size_t read_len)
 {
     i2c_master_dev_handle_t dev_handle = get_device_handle(dev_addr);
 
@@ -159,8 +162,8 @@ esp_err_t I2Cdev::perform_transaction(
  * @return Number of bytes read (1 on success, 0 on failure)
  */
 
-int8_t I2Cdev::readBit(
-  uint8_t devAddr, uint8_t regAddr, uint8_t bitNum, uint8_t * data, uint16_t timeout)
+int8_t I2Cdev::read_bit(
+  uint8_t dev_addr, uint8_t reg_addr, uint8_t bit_num, uint8_t * data, uint16_t timeout)
 {
     uint8_t b;
     uint8_t count = read_byte(dev_addr, reg_addr, &b, timeout);
@@ -211,7 +214,7 @@ int8_t I2Cdev::read_bits(uint8_t dev_addr,
  * @return Number of bytes read (1 on success, 0 on failure)
  */
 
-int8_t I2Cdev::readByte(uint8_t devAddr, uint8_t regAddr, uint8_t * data, uint16_t timeout)
+int8_t I2Cdev::read_byte(uint8_t dev_addr, uint8_t reg_addr, uint8_t * data, uint16_t timeout)
 {
     return read_bytes(dev_addr, reg_addr, 1, data, timeout);
 }

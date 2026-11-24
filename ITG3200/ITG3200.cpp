@@ -430,7 +430,7 @@ bool ITG3200::get_int_data_ready_status()
  */
 bool ITG3200::get_temperature(int16_t * temp)
 {
-    int8_t result = I2Cdev::readBytes(
+    int8_t result = I2Cdev::read_bytes(
       m_dev_addr, static_cast<uint8_t>(Register::TEMP_OUT_H), sizeof(int16_t), m_buffer);
 
     if(result == 2){
@@ -450,7 +450,7 @@ bool ITG3200::get_temperature(int16_t * temp)
  */
 bool ITG3200::get_rotation(int16_t * x, int16_t * y, int16_t * z)
 {
-    int8_t result = I2Cdev::readBytes(
+    int8_t result = I2Cdev::read_bytes(
       m_dev_addr, static_cast<uint8_t>(Register::GYRO_XOUT_H), sizeof(int16_t) * 3, m_buffer);
 
     if(result == 6){
@@ -471,7 +471,7 @@ bool ITG3200::get_rotation(int16_t * x, int16_t * y, int16_t * z)
  */
 bool ITG3200::get_rotation_x(int16_t *x)
 {
-    int8_t result = I2Cdev::readBytes(
+    int8_t result = I2Cdev::read_bytes(
       m_dev_addr, static_cast<uint8_t>(Register::GYRO_XOUT_H), sizeof(int16_t), m_buffer);
      if(result == 2){
       *x = ((((int16_t)m_buffer[0]) << 8) | m_buffer[1]);
@@ -488,7 +488,7 @@ bool ITG3200::get_rotation_x(int16_t *x)
  */
 bool ITG3200::get_rotation_y(int16_t *y)
 {
-    int8_t result = I2Cdev::readBytes(
+    int8_t result = I2Cdev::read_bytes(
       m_dev_addr, static_cast<uint8_t>(Register::GYRO_YOUT_H), sizeof(int16_t), m_buffer);
 
     if(result == 2){
@@ -506,7 +506,7 @@ bool ITG3200::get_rotation_y(int16_t *y)
  */
 bool ITG3200::get_rotation_z(int16_t *z)
 {
-    int8_t result = I2Cdev::readBytes(
+    int8_t result = I2Cdev::read_bytes(
       m_dev_addr, static_cast<uint8_t>(Register::GYRO_ZOUT_H), sizeof(int16_t), m_buffer);
     
     if(result == 2){

@@ -41,7 +41,7 @@ static esp_err_t kicker_read(uint8_t reg, uint8_t *value)
     if (!kicker_is_initialized())
         return ESP_ERR_INVALID_STATE;
 
-    return I2Cdev::readByte(
+    return I2Cdev::read_byte(
         KICKER_I2C_ADDRESS,
         reg,
         value
@@ -54,7 +54,7 @@ static esp_err_t kicker_write(uint8_t reg, uint8_t value)
     if (!kicker_is_initialized())
         return ESP_ERR_INVALID_STATE;
 
-    return I2Cdev::writeByte(
+    return I2Cdev::write_byte(
         KICKER_I2C_ADDRESS,
         reg,
         value
