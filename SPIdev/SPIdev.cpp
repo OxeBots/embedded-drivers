@@ -54,7 +54,11 @@ void SPIdev::init()
     cached_count = 0;
     memset(device_cache, 0, sizeof(device_cache));
     if (transaction_mutex == nullptr)
+    {
         transaction_mutex = xSemaphoreCreateMutex();
+        if (transaction_mutex == nullptr)
+            ESP_LOGE(TAG, "Failed to create the SPI transaction mutex");
+    }
 }
 
 bool SPIdev::is_initialized()

@@ -49,7 +49,7 @@ static const char * TAG = "I2Cdev";
 #define I2C_NUM I2C_NUM_0
 
 // Static member definition
-uint16_t I2Cdev::readTimeout = I2CDEV_DEFAULT_READ_TIMEOUT;
+uint16_t I2Cdev::read_timeout = I2CDEV_DEFAULT_READ_TIMEOUT;
 i2c_master_bus_handle_t I2Cdev::global_bus_handle = NULL;
 i2c_dev_cache_entry_t I2Cdev::device_cache[I2CDEV_MAX_CACHED_DEVICES];
 uint8_t I2Cdev::cached_count = 0;
@@ -75,17 +75,17 @@ i2c_master_bus_handle_t I2Cdev::get_bus_handle()
 }
 
 /** Get or create device handle for given address
- * @param devAddr I2C slave device address
+ * @param dev_addr I2C slave device address
  * @return Device handle or NULL on failure
  */
-i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t devAddr, uint32_t scl_speed_hz)
+i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t dev_addr, uint32_t scl_speed_hz)
 {
     if (global_bus_handle == NULL)
         return NULL;
 
     for (int i = 0; i < cached_count; i++)
     {
-        if (device_cache[i].addr == devAddr)
+        if (device_cache[i].addr == dev_addr)
             return device_cache[i].handle;
     }
 
@@ -97,7 +97,7 @@ i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t devAddr, uint32_t scl_
 
     i2c_device_config_t dev_cfg = {
       .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-      .device_address = devAddr,
+      .device_address = dev_addr,
       .scl_speed_hz = scl_speed_hz,
       .scl_wait_us = 0,
       .flags = {.disable_ack_check = 0},
@@ -108,11 +108,11 @@ i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t devAddr, uint32_t scl_
 
     if (ret != ESP_OK)
     {
-        ESP_LOGE(TAG, "Failed to add device 0x%02x: %s", devAddr, esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Failed to add device 0x%02x: %s", dev_addr, esp_err_to_name(ret));
         return NULL;
     }
 
-    device_cache[cached_count].addr = devAddr;
+    device_cache[cached_count].addr = dev_addr;
     device_cache[cached_count].handle = dev_handle;
     cached_count++;
 
@@ -120,7 +120,7 @@ i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t devAddr, uint32_t scl_
 }
 
 /** Perform I2C transaction (write followed by read) or write only
- * @param devAddr I2C slave device address
+ * @param dev_addr I2C slave device address
  * @param write_buffer Buffer with data to write
  * @param write_len Number of bytes to write
  * @param read_buffer Buffer to store read data
@@ -131,7 +131,7 @@ i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t devAddr, uint32_t scl_
 esp_err_t I2Cdev::perform_transaction(
   uint8_t devAddr, uint8_t * write_buffer, size_t write_len, uint8_t * read_buffer, size_t read_len)
 {
-    i2c_master_dev_handle_t dev_handle = get_device_handle(devAddr);
+    i2c_master_dev_handle_t dev_handle = get_device_handle(dev_addr);
 
     if (dev_handle == NULL)
         return ESP_FAIL;
@@ -150,102 +150,101 @@ esp_err_t I2Cdev::perform_transaction(
 }
 
 /** Read a single bit from an 8-bit device register.
- * @param devAddr I2C slave device address
- * @param regAddr Register regAddr to read from
- * @param bitNum Bit position to read (0-7)
+ * @param dev_addr I2C slave device address
+ * @param reg_addr Register address to read from
+ * @param bit_num Bit position to read (0-7)
  * @param data Container for single bit value
  * @param timeout Optional read timeout in milliseconds (0 to disable, leave off to use default
- * class value in I2Cdev::readTimeout)
- * @return Status of read operation (true = success)
+ * class value in I2Cdev::read_timeout)
+ * @return Number of bytes read (1 on success, 0 on failure)
  */
 
 int8_t I2Cdev::readBit(
   uint8_t devAddr, uint8_t regAddr, uint8_t bitNum, uint8_t * data, uint16_t timeout)
 {
     uint8_t b;
-    uint8_t count = readByte(devAddr, regAddr, &b, timeout);
-    *data = b & (1 << bitNum);
+    uint8_t count = read_byte(dev_addr, reg_addr, &b, timeout);
+    *data = b & (1 << bit_num);
     return count;
 }
 
 /** Read multiple bits from an 8-bit device register.
- * @param devAddr I2C slave device address
- * @param regAddr Register regAddr to read from
- * @param bitStart First bit position to read (0-7)
+ * @param dev_addr I2C slave device address
+ * @param reg_addr Register address to read from
+ * @param bit_start First bit position to read (0-7)
  * @param length Number of bits to read (not more than 8)
- * @param data Container for right-aligned value (i.e. '101' read from any bitStart position will
+ * @param data Container for right-aligned value (i.e. '101' read from any bit_start position will
  * equal 0x05)
  * @param timeout Optional read timeout in milliseconds (0 to disable, leave off to use default
- * class value in I2Cdev::readTimeout)
- * @return Status of read operation (true = success)
+ * class value in I2Cdev::read_timeout)
+ * @return Number of bytes read (1 on success, 0 on failure)
  */
-int8_t I2Cdev::readBits(uint8_t devAddr,
-                        uint8_t regAddr,
-                        uint8_t bitStart,
-                        uint8_t length,
-                        uint8_t * data,
-                        uint16_t timeout)
+int8_t I2Cdev::read_bits(uint8_t dev_addr,
+                         uint8_t reg_addr,
+                         uint8_t bit_start,
+                         uint8_t length,
+                         uint8_t * data,
+                         uint16_t timeout)
 {
     // 01101001 read byte
     // 76543210 bit numbers
-    //    xxx   args: bitStart=4, length=3
+    //    xxx   args: bit_start=4, length=3
     //    010   masked
     //   -> 010 shifted
     uint8_t count, b;
-    if ((count = readByte(devAddr, regAddr, &b, timeout)) != 0)
+    if ((count = read_byte(dev_addr, reg_addr, &b, timeout)) != 0)
     {
-        uint8_t mask = ((1 << length) - 1) << (bitStart - length + 1);
+        uint8_t mask = ((1 << length) - 1) << (bit_start - length + 1);
         b &= mask;
-        b >>= (bitStart - length + 1);
+        b >>= (bit_start - length + 1);
         *data = b;
     }
     return count;
 }
 
 /** Read single byte from an 8-bit device register.
- * @param devAddr I2C slave device address
- * @param regAddr Register regAddr to read from
+ * @param dev_addr I2C slave device address
+ * @param reg_addr Register address to read from
  * @param data Container for byte value read from device
  * @param timeout Optional read timeout in milliseconds (0 to disable, leave off to use default
- * class value in I2Cdev::readTimeout)
- * @return Status of read operation (true = success)
+ * class value in I2Cdev::read_timeout)
+ * @return Number of bytes read (1 on success, 0 on failure)
  */
 
 int8_t I2Cdev::readByte(uint8_t devAddr, uint8_t regAddr, uint8_t * data, uint16_t timeout)
 {
-    return readBytes(devAddr, regAddr, 1, data, timeout);
+    return read_bytes(dev_addr, reg_addr, 1, data, timeout);
 }
 
 /** Read multiple bytes from an 8-bit device register.
- * @param devAddr I2C slave device address
- * @param regAddr First register regAddr to read from
+ * @param dev_addr I2C slave device address
+ * @param reg_addr First register address to read from
  * @param length Number of bytes to read
  * @param data Buffer to store read data in
  * @param timeout Optional read timeout in milliseconds (0 to disable, leave off to use default
- * class value in I2Cdev::readTimeout)
- * @return I2C_TransferReturn_TypeDef
- * http://downloads.energymicro.com/documentation/doxygen/group__I2C.html
+ * class value in I2Cdev::read_timeout)
+ * @return Number of bytes read (length on success, 0 on failure)
  */
-int8_t I2Cdev::readBytes(
-  uint8_t devAddr, uint8_t regAddr, uint8_t length, uint8_t * data, uint16_t timeout)
+int8_t I2Cdev::read_bytes(
+  uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t * data, uint16_t timeout)
 {
-    esp_err_t err = perform_transaction(devAddr, &regAddr, 1, data, length);
+    esp_err_t err = perform_transaction(dev_addr, &reg_addr, 1, data, length);
     return (err == ESP_OK) ? length : 0;
 }
 
 /**
- * read word
- * @param devAddr
- * @param regAddr
- * @param data
- * @param timeout
- * @return
+ * @brief Read a 16-bit word from a device register.
+ * @param dev_addr I2C slave device address
+ * @param reg_addr Register address to read from
+ * @param data Container for the word value
+ * @param timeout Optional read timeout in milliseconds
+ * @return 0 on success, -1 on failure
  */
-int8_t I2Cdev::readWord(uint8_t devAddr, uint8_t regAddr, uint16_t * data, uint16_t timeout)
+int8_t I2Cdev::read_word(uint8_t dev_addr, uint8_t reg_addr, uint16_t * data, uint16_t timeout)
 {
     uint8_t msb[2] = {0, 0};
     // Note: I2Cdev usually assumes Big Endian words from sensors unless specified
-    if (readBytes(devAddr, regAddr, 2, msb, timeout) == 2)
+    if (read_bytes(dev_addr, reg_addr, 2, msb, timeout) == 2)
     {
         *data = (int16_t)((msb[0] << 8) | msb[1]);
         return 0;  // Success
@@ -255,93 +254,93 @@ int8_t I2Cdev::readWord(uint8_t devAddr, uint8_t regAddr, uint16_t * data, uint1
 }
 
 /** Write single bit in an 8-bit device register.
- * @param devAddr I2C slave device address
- * @param regAddr Register regAddr to write to
- * @param bitNum Bit position to write (0-7)
+ * @param dev_addr I2C slave device address
+ * @param reg_addr Register address to write to
+ * @param bit_num Bit position to write (0-7)
  * @param data New bit value to write
  * @return Status of operation (true = success)
  */
-bool I2Cdev::writeBit(uint8_t devAddr, uint8_t regAddr, uint8_t bitNum, uint8_t data)
+bool I2Cdev::write_bit(uint8_t dev_addr, uint8_t reg_addr, uint8_t bit_num, uint8_t data)
 {
     uint8_t b;
-    readByte(devAddr, regAddr, &b);
-    b = (data != 0) ? (b | (1 << bitNum)) : (b & ~(1 << bitNum));
-    return writeByte(devAddr, regAddr, b);
+    read_byte(dev_addr, reg_addr, &b);
+    b = (data != 0) ? (b | (1 << bit_num)) : (b & ~(1 << bit_num));
+    return write_byte(dev_addr, reg_addr, b);
 }
 
 /** Write multiple bits in an 8-bit device register.
- * @param devAddr I2C slave device address
- * @param regAddr Register regAddr to write to
- * @param bitStart First bit position to write (0-7)
+ * @param dev_addr I2C slave device address
+ * @param reg_addr Register address to write to
+ * @param bit_start First bit position to write (0-7)
  * @param length Number of bits to write (not more than 8)
  * @param data Right-aligned value to write
  * @return Status of operation (true = success)
  */
-bool I2Cdev::writeBits(
-  uint8_t devAddr, uint8_t regAddr, uint8_t bitStart, uint8_t length, uint8_t data)
+bool I2Cdev::write_bits(
+  uint8_t dev_addr, uint8_t reg_addr, uint8_t bit_start, uint8_t length, uint8_t data)
 {
     //      010 value to write
     // 76543210 bit numbers
-    //    xxx   args: bitStart=4, length=3
+    //    xxx   args: bit_start=4, length=3
     // 00011100 mask byte
     // 10101111 original value (sample)
     // 10100011 original & ~mask
     // 10101011 masked | value
     uint8_t b = 0;
-    if (readByte(devAddr, regAddr, &b) != 0)
+    if (read_byte(dev_addr, reg_addr, &b) != 0)
     {
-        uint8_t mask = ((1 << length) - 1) << (bitStart - length + 1);
-        data <<= (bitStart - length + 1);  // shift data into correct position
-        data &= mask;                      // zero all non-important bits in data
-        b &= ~(mask);                      // zero all important bits in existing byte
-        b |= data;                         // combine data with existing byte
-        return writeByte(devAddr, regAddr, b);
+        uint8_t mask = ((1 << length) - 1) << (bit_start - length + 1);
+        data <<= (bit_start - length + 1);  // shift data into correct position
+        data &= mask;                       // zero all non-important bits in data
+        b &= ~(mask);                       // zero all important bits in existing byte
+        b |= data;                          // combine data with existing byte
+        return write_byte(dev_addr, reg_addr, b);
     }
     return false;
 }
 
 /** Write single byte to an 8-bit device register.
- * @param devAddr I2C slave device address
- * @param regAddr Register address to write to
+ * @param dev_addr I2C slave device address
+ * @param reg_addr Register address to write to
  * @param data New byte value to write
  * @return Status of operation (true = success)
  */
-bool I2Cdev::writeByte(uint8_t devAddr, uint8_t regAddr, uint8_t data)
+bool I2Cdev::write_byte(uint8_t dev_addr, uint8_t reg_addr, uint8_t data)
 {
-    uint8_t buffer[2] = {regAddr, data};
-    return perform_transaction(devAddr, buffer, 2, NULL, 0) == ESP_OK;
+    uint8_t buffer[2] = {reg_addr, data};
+    return perform_transaction(dev_addr, buffer, 2, NULL, 0) == ESP_OK;
 }
 
 /** Write single word to a 16-bit device register.
- * @param devAddr I2C slave device address
- * @param regAddr Register address to write to
+ * @param dev_addr I2C slave device address
+ * @param reg_addr Register address to write to
  * @param data New word value to write
  * @return Status of operation (true = success)
  */
-bool I2Cdev::writeWord(uint8_t devAddr, uint8_t regAddr, uint16_t data)
+bool I2Cdev::write_word(uint8_t dev_addr, uint8_t reg_addr, uint16_t data)
 {
-    uint8_t buffer[3] = {regAddr, (uint8_t)(data >> 8), (uint8_t)(data & 0xff)};
-    return perform_transaction(devAddr, buffer, 3, NULL, 0) == ESP_OK;
+    uint8_t buffer[3] = {reg_addr, (uint8_t)(data >> 8), (uint8_t)(data & 0xff)};
+    return perform_transaction(dev_addr, buffer, 3, NULL, 0) == ESP_OK;
 }
 
 /** Write multiple bytes to an 8-bit device register.
- * @param devAddr I2C slave device address
- * @param regAddr First register address to write to
+ * @param dev_addr I2C slave device address
+ * @param reg_addr First register address to write to
  * @param length Number of bytes to write
  * @param data Buffer to copy new data from
  * @return Status of operation (true = success)
  */
-bool I2Cdev::writeBytes(uint8_t devAddr, uint8_t regAddr, uint8_t length, uint8_t * data)
+bool I2Cdev::write_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t * data)
 {
     // We need to construct a single buffer: [RegAddr, Data0, Data1, ...]
     uint8_t * buffer = (uint8_t *)malloc(length + 1);
     if (!buffer)
         return false;
 
-    buffer[0] = regAddr;
+    buffer[0] = reg_addr;
     memcpy(buffer + 1, data, length);
 
-    esp_err_t err = perform_transaction(devAddr, buffer, length + 1, NULL, 0);
+    esp_err_t err = perform_transaction(dev_addr, buffer, length + 1, NULL, 0);
 
     free(buffer);
     return err == ESP_OK;

@@ -152,6 +152,7 @@ esp_err_t BL48250::configure(const MotorDriverConfig & config)
 
         directions_[i] = MOTOR_CW;
         duty_cycles_[i] = 0;
+        zero_duty_since_us_[i] = esp_timer_get_time();
     }
 
     uint8_t direction_value = 0;
@@ -211,29 +212,87 @@ void BL48250::deinit()
 }
 
 /**
- * @brief Set PWM duty cycles and directions for all 4 motors.
- *
- * @param duties Array of 4 duty cycle values (0 to max_duty_)
- * @param directions Array of 4 direction values (MOTOR_CW or MOTOR_CCW)
+ * @brief Apply one open-loop output. The caller is responsible for rotor standstill.
  */
 void BL48250::set_duties(const std::array<uint32_t, 4> & duties,
                          const std::array<uint8_t, 4> & directions)
 {
-    for (size_t i = 0; i < 4; ++i)
+    if (directions != directions_)
     {
-        directions_[i] = directions[i];
-        duty_cycles_[i] = std::min(duties[i], max_duty_);
-        ledc_set_duty(speed_mode_, motor_channels_[i], duty_cycles_[i]);
-        ledc_update_duty(speed_mode_, motor_channels_[i]);
+        set_duties(duties, directions, 0);
+        vTaskDelay(pdMS_TO_TICKS(DIRECTION_CHANGE_STOP_US / 1000) + 1);
+    }
+    set_duties(duties, directions, 0x0F);
+}
+
+/**
+ * @brief Stop reversing motors before latching their requested direction.
+ */
+void BL48250::set_duties(const std::array<uint32_t, 4> & duties,
+                         const std::array<uint8_t, 4> & directions,
+                         uint8_t standstill_mask)
+{
+    if (!m_configured)
+        return;
+
+    const int64_t now_us = esp_timer_get_time();
+    auto next_directions = directions_;
+    uint8_t change_mask = 0;
+    uint8_t change_value = 0;
+    for (size_t i = 0; i < duties.size(); ++i)
+    {
+        if (directions[i] == directions_[i])
+            continue;
+        if (duty_cycles_[i] != 0)
+        {
+            write_duty(i, 0);
+            continue;
+        }
+        if ((standstill_mask & (1U << i)) == 0 ||
+            now_us - zero_duty_since_us_[i] < DIRECTION_CHANGE_STOP_US)
+            continue;
+        const uint8_t bit = static_cast<uint8_t>(1U << direction_bits_[i]);
+        change_mask |= bit;
+        if (directions[i] != 0)
+            change_value |= bit;
+        next_directions[i] = directions[i];
     }
 
-    uint8_t direction_value = 0;
-    for (size_t i = 0; i < 4; ++i)
-        if (directions_[i] != 0)
-            direction_value |= static_cast<uint8_t>(1U << direction_bits_[i]);
+    if (change_mask != 0)
+    {
+        if (direction_shift_register_->update_mask(change_mask, change_value) == ESP_OK)
+        {
+            xSemaphoreTake(m_fb_mutex, portMAX_DELAY);
+            directions_ = next_directions;
+            xSemaphoreGive(m_fb_mutex);
+        }
+        else
+            ESP_LOGE(TAG, "Failed to update motor direction outputs");
+    }
 
-    if (direction_shift_register_->update_mask(direction_mask_, direction_value) != ESP_OK)
-        ESP_LOGE(TAG, "Failed to update motor direction outputs");
+    for (size_t i = 0; i < duties.size(); ++i)
+    {
+        if (directions[i] == directions_[i])
+            write_duty(i, std::min(duties[i], max_duty_));
+    }
+}
+
+/**
+ * @brief Write changed duty and record when the hardware was disabled.
+ */
+void BL48250::write_duty(size_t motor, uint32_t duty)
+{
+    if (duty == duty_cycles_[motor])
+        return;
+    if (ledc_set_duty(speed_mode_, motor_channels_[motor], duty) != ESP_OK ||
+        ledc_update_duty(speed_mode_, motor_channels_[motor]) != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to update motor %zu duty", motor + 1);
+        return;
+    }
+    duty_cycles_[motor] = duty;
+    if (duty == 0)
+        zero_duty_since_us_[motor] = esp_timer_get_time();
 }
 
 std::array<int32_t, 4> BL48250::pulse_counts() const
@@ -251,6 +310,16 @@ std::array<int32_t, 4> BL48250::pulse_counts() const
     }
 
     return counts;
+}
+
+std::array<uint32_t, 4> BL48250::get_duty_cycles() const
+{
+    return duty_cycles_;
+}
+
+std::array<uint8_t, 4> BL48250::get_directions() const
+{
+    return directions_;
 }
 
 /**
@@ -426,12 +495,12 @@ void BL48250::deinit_pulse_feedback()
     ESP_LOGI(TAG, "Pulse feedback counters released.");
 }
 
-bool BL48250::pulse_velocity_rad_s(size_t motor_idx, float * velocity)
+bool BL48250::pulse_velocity_rad_s(size_t motor_idx, float * velocity, TickType_t wait_ticks)
 {
     if (velocity == nullptr || motor_idx >= 4 || m_fb_mutex == nullptr)
         return false;
 
-    if (xSemaphoreTake(m_fb_mutex, pdMS_TO_TICKS(10)) != pdTRUE)
+    if (xSemaphoreTake(m_fb_mutex, wait_ticks) != pdTRUE)
         return false;
 
     bool valid = false;

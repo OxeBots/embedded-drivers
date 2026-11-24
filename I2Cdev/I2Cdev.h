@@ -54,45 +54,45 @@ class I2Cdev
     static i2c_master_bus_handle_t get_bus_handle();
 
     // Get or create the cached device handle for a 7-bit address.
-    // devAddr: I2C slave device address (7-bit).
+    // dev_addr: I2C slave device address (7-bit).
     // scl_speed_hz: bus clock for the device when first registered.
     // Returns the device handle, or NULL on failure.
-    static i2c_master_dev_handle_t get_device_handle(uint8_t devAddr,
+    static i2c_master_dev_handle_t get_device_handle(uint8_t dev_addr,
                                                      uint32_t scl_speed_hz = 400000);
 
-    static int8_t readBit(uint8_t devAddr,
-                          uint8_t regAddr,
-                          uint8_t bitNum,
-                          uint8_t * data,
-                          uint16_t timeout = I2Cdev::readTimeout);
-    static int8_t readBits(uint8_t devAddr,
-                           uint8_t regAddr,
-                           uint8_t bitStart,
-                           uint8_t length,
+    static int8_t read_bit(uint8_t dev_addr,
+                           uint8_t reg_addr,
+                           uint8_t bit_num,
                            uint8_t * data,
-                           uint16_t timeout = I2Cdev::readTimeout);
-    static int8_t readByte(uint8_t devAddr,
-                           uint8_t regAddr,
-                           uint8_t * data,
-                           uint16_t timeout = I2Cdev::readTimeout);
-    static int8_t readWord(uint8_t devAddr,
-                           uint8_t regAddr,
-                           uint16_t * data,
-                           uint16_t timeout = I2Cdev::readTimeout);
-    static int8_t readBytes(uint8_t devAddr,
-                            uint8_t regAddr,
+                           uint16_t timeout = I2Cdev::read_timeout);
+    static int8_t read_bits(uint8_t dev_addr,
+                            uint8_t reg_addr,
+                            uint8_t bit_start,
                             uint8_t length,
                             uint8_t * data,
-                            uint16_t timeout = I2Cdev::readTimeout);
+                            uint16_t timeout = I2Cdev::read_timeout);
+    static int8_t read_byte(uint8_t dev_addr,
+                            uint8_t reg_addr,
+                            uint8_t * data,
+                            uint16_t timeout = I2Cdev::read_timeout);
+    static int8_t read_word(uint8_t dev_addr,
+                            uint8_t reg_addr,
+                            uint16_t * data,
+                            uint16_t timeout = I2Cdev::read_timeout);
+    static int8_t read_bytes(uint8_t dev_addr,
+                             uint8_t reg_addr,
+                             uint8_t length,
+                             uint8_t * data,
+                             uint16_t timeout = I2Cdev::read_timeout);
 
-    static bool writeBit(uint8_t devAddr, uint8_t regAddr, uint8_t bitNum, uint8_t data);
-    static bool writeBits(
-      uint8_t devAddr, uint8_t regAddr, uint8_t bitStart, uint8_t length, uint8_t data);
-    static bool writeByte(uint8_t devAddr, uint8_t regAddr, uint8_t data);
-    static bool writeWord(uint8_t devAddr, uint8_t regAddr, uint16_t data);
-    static bool writeBytes(uint8_t devAddr, uint8_t regAddr, uint8_t length, uint8_t * data);
+    static bool write_bit(uint8_t dev_addr, uint8_t reg_addr, uint8_t bit_num, uint8_t data);
+    static bool write_bits(
+      uint8_t dev_addr, uint8_t reg_addr, uint8_t bit_start, uint8_t length, uint8_t data);
+    static bool write_byte(uint8_t dev_addr, uint8_t reg_addr, uint8_t data);
+    static bool write_word(uint8_t dev_addr, uint8_t reg_addr, uint16_t data);
+    static bool write_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t * data);
 
-    static uint16_t readTimeout;
+    static uint16_t read_timeout;
 
    private:
     static i2c_master_bus_handle_t global_bus_handle;
@@ -100,7 +100,7 @@ class I2Cdev
     static i2c_dev_cache_entry_t device_cache[I2CDEV_MAX_CACHED_DEVICES];
     static uint8_t cached_count;
 
-    static esp_err_t perform_transaction(uint8_t devAddr,
+    static esp_err_t perform_transaction(uint8_t dev_addr,
                                          uint8_t * write_buffer,
                                          size_t write_len,
                                          uint8_t * read_buffer,

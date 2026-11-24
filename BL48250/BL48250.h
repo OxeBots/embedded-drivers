@@ -4,6 +4,7 @@
 #include <driver/gpio.h>
 #include <driver/ledc.h>
 #include <driver/pulse_cnt.h>
+#include <esp_attr.h>
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -72,14 +73,27 @@ class BL48250
     void set_duties(const std::array<uint32_t, 4> & duties,
                     const std::array<uint8_t, 4> & directions);
 
+    // Called each control tick. Each bit confirms standstill for one motor.
+    // A pending reversal leaves that motor's duty at zero.
+    void set_duties(const std::array<uint32_t, 4> & duties,
+                    const std::array<uint8_t, 4> & directions,
+                    uint8_t standstill_mask);
+
     // Wheel-shaft angular velocity (rad/s) of one motor from a sliding window
     // over its pulse counter, recomputed without consuming counts. Returns
     // false when that motor has no counter or no window baseline yet; the sign
-    // follows the last commanded direction (positive means CW).
-    bool pulse_velocity_rad_s(size_t motor_idx, float * velocity);
+    // follows the last commanded direction (positive means CW). IRAM hot path:
+    // the acquisition task reads it for every published encoder sample.
+    bool IRAM_ATTR pulse_velocity_rad_s(size_t motor_idx,
+                                        float * velocity,
+                                        TickType_t wait_ticks = pdMS_TO_TICKS(10));
 
     // Snapshot of each counter total since it was started (diagnostics).
     std::array<int32_t, 4> pulse_counts() const;
+
+    // Last duty cycles and directions written by set_duties() (diagnostics).
+    std::array<uint32_t, 4> get_duty_cycles() const;
+    std::array<uint8_t, 4> get_directions() const;
 
     BL48250(const BL48250 &) = delete;
     BL48250 & operator=(const BL48250 &) = delete;
@@ -101,6 +115,9 @@ class BL48250
 
     std::array<uint8_t, 4> directions_;
     std::array<uint32_t, 4> duty_cycles_;
+    std::array<int64_t, 4> zero_duty_since_us_ = {};
+
+    void write_duty(size_t motor, uint32_t duty);
 
     bool m_configured;
 
@@ -120,6 +137,11 @@ class BL48250
     // PULSE_RING_PUSH_INTERVAL_US, so the capacity covers many window lengths.
     static constexpr size_t PULSE_RING_SIZE = 32;
     static constexpr int64_t PULSE_RING_PUSH_INTERVAL_US = 5000;
+
+    // The module only accepts a direction change while its PWM input is
+    // inactive. Keep the affected motors stopped for this long before moving
+    // the DIR lines.
+    static constexpr uint32_t DIRECTION_CHANGE_STOP_US = 5000;
 
     std::array<gpio_num_t, 4> motor_fb_pins_;
     std::array<pcnt_unit_handle_t, 4> pcnt_units_;

@@ -18,7 +18,7 @@ QMC5883L::QMC5883L(uint8_t address) : m_dev_addr(address)
 void QMC5883L::init()
 {
     // Define Set/Reset Period (Recommended by datasheet)
-    I2Cdev::writeByte(m_dev_addr, static_cast<uint8_t>(Register::PERIOD), 0x01);
+    I2Cdev::write_byte(m_dev_addr, static_cast<uint8_t>(Register::PERIOD), 0x01);
 
     // Set Continuous Mode, 200Hz, 8G Range, OSR 512
     set_mode(Mode::CONTINUOUS, OutputDataRate::ODR_200HZ, Range::RNG_8G, Oversampling::OSR_512);
@@ -50,7 +50,7 @@ void QMC5883L::set_mode(Mode mode, OutputDataRate odr, Range rng, Oversampling o
     uint8_t config_val = static_cast<uint8_t>(m_mode) | static_cast<uint8_t>(m_odr) |
                          static_cast<uint8_t>(m_rng) | static_cast<uint8_t>(m_osr);
 
-    I2Cdev::writeByte(m_dev_addr, static_cast<uint8_t>(Register::CONTROL_1), config_val);
+    I2Cdev::write_byte(m_dev_addr, static_cast<uint8_t>(Register::CONTROL_1), config_val);
 }
 
 /**
@@ -58,7 +58,7 @@ void QMC5883L::set_mode(Mode mode, OutputDataRate odr, Range rng, Oversampling o
  */
 void QMC5883L::set_reset()
 {
-    I2Cdev::writeByte(m_dev_addr, static_cast<uint8_t>(Register::CONTROL_2), 0x80);
+    I2Cdev::write_byte(m_dev_addr, static_cast<uint8_t>(Register::CONTROL_2), 0x80);
 }
 
 /**
@@ -311,7 +311,7 @@ bool QMC5883L::is_calibrated() const
 void QMC5883L::read()
 {
     // sizeof(m_buffer) limits FlawFinder boundaries warning.
-    if (I2Cdev::readBytes(
+    if (I2Cdev::read_bytes(
           m_dev_addr, static_cast<uint8_t>(Register::DATAX_L), sizeof(m_buffer), m_buffer) ==
         sizeof(m_buffer))
     {
@@ -414,6 +414,21 @@ int16_t QMC5883L::get_axis(int index) const
     return m_v_calibrated[index];
 }
 
+int16_t QMC5883L::get_x() const
+{
+    return get_axis(0);
+}
+
+int16_t QMC5883L::get_y() const
+{
+    return get_axis(1);
+}
+
+int16_t QMC5883L::get_z() const
+{
+    return get_axis(2);
+}
+
 /**
  * @brief Computes the azimuth (heading) taking into account calibration and magnetic declination.
  * @return Azimuth in degrees (0 to 359).
@@ -463,7 +478,7 @@ void QMC5883L::get_direction(char * direction, int azimuth) const
  */
 uint8_t QMC5883L::get_chip_id()
 {
-    I2Cdev::readByte(m_dev_addr, static_cast<uint8_t>(Register::CHIP_ID), m_buffer);
+    I2Cdev::read_byte(m_dev_addr, static_cast<uint8_t>(Register::CHIP_ID), m_buffer);
     return m_buffer[0];
 }
 

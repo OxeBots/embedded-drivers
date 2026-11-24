@@ -54,8 +54,8 @@ esp_err_t NVSManager::init()
  * @brief Create the internal operation queue and launch the nvs_writer task.
  *
  * Must be called after init(). The nvs_writer task (priority 4, 4096-byte stack)
- * is the sole caller of ESP-IDF nvs_* functions. Serializing all NVS access
- * through one task avoids flash contention with the ADC continuous driver.
+ * is the sole caller of nvs_open(), nvs_set_*() and nvs_get_*(). Serializing all
+ * NVS access through one task avoids flash contention with the ADC continuous driver.
  *
  * After this call, save_* and load_* are safe from any task context.
  */
@@ -63,8 +63,18 @@ void NVSManager::start()
 {
     configASSERT(m_op_queue == nullptr);
     m_op_queue = xQueueCreate(QUEUE_DEPTH, sizeof(NvsOp));
-    configASSERT(m_op_queue != nullptr);
-    xTaskCreate(nvs_writer_task, "nvs_writer", 4096, nullptr, 4, nullptr);
+    if (m_op_queue == nullptr)
+    {
+        ESP_LOGE(TAG, "Failed to create the NVS operation queue.");
+        return;
+    }
+    if (xTaskCreate(nvs_writer_task, "nvs_writer", 4096, nullptr, 4, nullptr) != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to start the NVS writer task.");
+        vQueueDelete(m_op_queue);
+        m_op_queue = nullptr;
+        return;
+    }
     ESP_LOGI(TAG, "NVS writer started (queue_depth=%zu, blob_max=%zu).", QUEUE_DEPTH, BLOB_MAX);
 }
 
@@ -79,11 +89,18 @@ void NVSManager::start()
  * @param ns   Namespace (max 15 chars).
  * @param key  Key (max 15 chars).
  * @param value 32-bit integer to write.
- * @return ESP_OK on success, ESP_ERR_INVALID_STATE if start() not called,
+ * @return ESP_OK on success, ESP_ERR_INVALID_ARG for null pointers,
+ *         ESP_ERR_INVALID_STATE if start() not called,
  *         ESP_ERR_TIMEOUT if the queue is full.
  */
 esp_err_t NVSManager::save_i32(const char * ns, const char * key, int32_t value)
 {
+    if (ns == nullptr || key == nullptr)
+    {
+        ESP_LOGE(TAG, "save_i32 called with a null ns or key pointer.");
+        return ESP_ERR_INVALID_ARG;
+    }
+
     if (m_op_queue == nullptr)
     {
         ESP_LOGE(TAG, "save_i32 called before start()");
@@ -120,12 +137,18 @@ esp_err_t NVSManager::save_i32(const char * ns, const char * key, int32_t value)
  * @param key    Key (max 15 chars).
  * @param data   Pointer to binary data.
  * @param length Size of data in bytes. Must be <= BLOB_MAX (128).
- * @return ESP_OK on success, ESP_ERR_INVALID_STATE if start() not called,
- *         ESP_ERR_INVALID_ARG if length > BLOB_MAX,
+ * @return ESP_OK on success, ESP_ERR_INVALID_ARG for null pointers or
+ *         length > BLOB_MAX, ESP_ERR_INVALID_STATE if start() not called,
  *         ESP_ERR_TIMEOUT if the queue is full.
  */
 esp_err_t NVSManager::save_blob(const char * ns, const char * key, const void * data, size_t length)
 {
+    if (ns == nullptr || key == nullptr || data == nullptr)
+    {
+        ESP_LOGE(TAG, "save_blob called with a null ns, key or data pointer.");
+        return ESP_ERR_INVALID_ARG;
+    }
+
     if (m_op_queue == nullptr)
     {
         ESP_LOGE(TAG, "save_blob called before start()");
@@ -165,13 +188,21 @@ esp_err_t NVSManager::save_blob(const char * ns, const char * key, const void * 
  * @param ns   Namespace (max 15 chars).
  * @param key  Key (max 15 chars).
  * @param out  Pointer to store the loaded value.
- * @return ESP_OK on success, ESP_ERR_INVALID_STATE if start() not called,
+ * @return ESP_OK on success, ESP_ERR_INVALID_ARG for null pointers,
+ *         ESP_ERR_NO_MEM if the response semaphore cannot be created,
+ *         ESP_ERR_INVALID_STATE if start() not called,
  *         ESP_ERR_TIMEOUT if the queue is full,
  *         ESP_ERR_NOT_FOUND if the key does not exist.
  */
 esp_err_t NVSManager::load_i32(const char * ns, const char * key, int32_t * out)
 {
     configASSERT(!xPortInIsrContext());
+
+    if (ns == nullptr || key == nullptr || out == nullptr)
+    {
+        ESP_LOGE(TAG, "load_i32 called with a null ns, key or out pointer.");
+        return ESP_ERR_INVALID_ARG;
+    }
 
     if (m_op_queue == nullptr)
     {
@@ -180,7 +211,11 @@ esp_err_t NVSManager::load_i32(const char * ns, const char * key, int32_t * out)
     }
 
     SemaphoreHandle_t sem = xSemaphoreCreateBinary();
-    configASSERT(sem != nullptr);
+    if (sem == nullptr)
+    {
+        ESP_LOGE(TAG, "load_i32: failed to create the response semaphore.");
+        return ESP_ERR_NO_MEM;
+    }
 
     esp_err_t result = ESP_FAIL;
 
@@ -218,14 +253,21 @@ esp_err_t NVSManager::load_i32(const char * ns, const char * key, int32_t * out)
  * @param key    Key (max 15 chars).
  * @param out    Pointer to store the loaded data.
  * @param length Pointer to buffer size (in/out: updated to actual bytes read).
- * @return ESP_OK on success, ESP_ERR_INVALID_STATE if start() not called,
- *         ESP_ERR_INVALID_ARG if *length > BLOB_MAX,
+ * @return ESP_OK on success, ESP_ERR_INVALID_ARG for null pointers or
+ *         *length > BLOB_MAX, ESP_ERR_NO_MEM if the response semaphore cannot
+ *         be created, ESP_ERR_INVALID_STATE if start() not called,
  *         ESP_ERR_TIMEOUT if the queue is full,
  *         ESP_ERR_NVS_NOT_FOUND if the key does not exist.
  */
 esp_err_t NVSManager::load_blob(const char * ns, const char * key, void * out, size_t * length)
 {
     configASSERT(!xPortInIsrContext());
+
+    if (ns == nullptr || key == nullptr || out == nullptr || length == nullptr)
+    {
+        ESP_LOGE(TAG, "load_blob called with a null ns, key, out or length pointer.");
+        return ESP_ERR_INVALID_ARG;
+    }
 
     if (m_op_queue == nullptr)
     {
@@ -241,7 +283,11 @@ esp_err_t NVSManager::load_blob(const char * ns, const char * key, void * out, s
     }
 
     SemaphoreHandle_t sem = xSemaphoreCreateBinary();
-    configASSERT(sem != nullptr);
+    if (sem == nullptr)
+    {
+        ESP_LOGE(TAG, "load_blob: failed to create the response semaphore.");
+        return ESP_ERR_NO_MEM;
+    }
 
     esp_err_t result = ESP_FAIL;
 
@@ -270,8 +316,8 @@ esp_err_t NVSManager::load_blob(const char * ns, const char * key, void * out, s
 /**
  * @brief FreeRTOS task function that processes all NVS operations from the queue.
  *
- * This task is the sole caller of ESP-IDF nvs_* functions, which serializes
- * all flash access and avoids contention of the hardware.
+ * This task is the sole caller of nvs_open(), nvs_set_*() and nvs_get_*(), which
+ * serializes all flash access and avoids contention of the hardware.
  */
 void NVSManager::nvs_writer_task(void * /*arg*/)
 {

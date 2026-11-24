@@ -1,10 +1,10 @@
 /**
  * @file ITG3200.cpp
  * @brief I2Cdev library collection - ITG3200 I2C device class
- * * Based on InvenSense ITG-3200 datasheet rev. 1.4, 3/30/2010 (PS-ITG-3200A-00-01.4)
+ * Based on InvenSense ITG-3200 datasheet rev. 1.4, 3/30/2010 (PS-ITG-3200A-00-01.4)
  * 7/31/2011 by Jeff Rowberg <jeff@rowberg.net>
  * Updates should (hopefully) always be available at https://github.com/jrowberg/i2cdevlib
- * * DISCLAIMER: This code is based on the I2Cdev library collection but has been modified and is
+ * DISCLAIMER: This code is based on the I2Cdev library collection but has been modified and is
  * not equal to the original.
  *
  * Changelog:
@@ -78,12 +78,12 @@ bool ITG3200::test_connection()
  * This register is used to verify the identity of the device (0b110100).
  * @return Device ID (should be 0x34, 52 dec, 64 oct)
  * @see Register::WHO_AM_I
- * @see RA_DEVID_BIT
- * @see RA_DEVID_LENGTH
+ * @see DEVID_BIT
+ * @see DEVID_LENGTH
  */
 uint8_t ITG3200::get_device_id()
 {
-    I2Cdev::readBits(
+    I2Cdev::read_bits(
       m_dev_addr, static_cast<uint8_t>(Register::WHO_AM_I), DEVID_BIT, DEVID_LENGTH, m_buffer);
     return m_buffer[0];
 }
@@ -95,12 +95,12 @@ uint8_t ITG3200::get_device_id()
  * @param id New device ID to set.
  * @see get_device_id()
  * @see Register::WHO_AM_I
- * @see RA_DEVID_BIT
- * @see RA_DEVID_LENGTH
+ * @see DEVID_BIT
+ * @see DEVID_LENGTH
  */
 void ITG3200::set_device_id(uint8_t id)
 {
-    I2Cdev::writeBits(
+    I2Cdev::write_bits(
       m_dev_addr, static_cast<uint8_t>(Register::WHO_AM_I), DEVID_BIT, DEVID_LENGTH, id);
 }
 
@@ -125,7 +125,7 @@ void ITG3200::set_device_id(uint8_t id)
  */
 uint8_t ITG3200::get_rate()
 {
-    I2Cdev::readByte(m_dev_addr, static_cast<uint8_t>(Register::SMPLRT_DIV), m_buffer);
+    I2Cdev::read_byte(m_dev_addr, static_cast<uint8_t>(Register::SMPLRT_DIV), m_buffer);
     return m_buffer[0];
 }
 
@@ -138,7 +138,7 @@ uint8_t ITG3200::get_rate()
  */
 void ITG3200::set_rate(uint8_t rate)
 {
-    I2Cdev::writeByte(m_dev_addr, static_cast<uint8_t>(Register::SMPLRT_DIV), rate);
+    I2Cdev::write_byte(m_dev_addr, static_cast<uint8_t>(Register::SMPLRT_DIV), rate);
 }
 
 /**
@@ -159,11 +159,11 @@ void ITG3200::set_rate(uint8_t rate)
  */
 ITG3200::FullScaleRange ITG3200::get_full_scale_range()
 {
-    I2Cdev::readBits(m_dev_addr,
-                     static_cast<uint8_t>(Register::DLPF_FS),
-                     DF_FS_SEL_BIT,
-                     DF_FS_SEL_LENGTH,
-                     m_buffer);
+    I2Cdev::read_bits(m_dev_addr,
+                      static_cast<uint8_t>(Register::DLPF_FS),
+                      DF_FS_SEL_BIT,
+                      DF_FS_SEL_LENGTH,
+                      m_buffer);
     return static_cast<FullScaleRange>(m_buffer[0]);
 }
 
@@ -177,11 +177,11 @@ ITG3200::FullScaleRange ITG3200::get_full_scale_range()
  */
 void ITG3200::set_full_scale_range(FullScaleRange range)
 {
-    I2Cdev::writeBits(m_dev_addr,
-                      static_cast<uint8_t>(Register::DLPF_FS),
-                      DF_FS_SEL_BIT,
-                      DF_FS_SEL_LENGTH,
-                      static_cast<uint8_t>(range));
+    I2Cdev::write_bits(m_dev_addr,
+                       static_cast<uint8_t>(Register::DLPF_FS),
+                       DF_FS_SEL_BIT,
+                       DF_FS_SEL_LENGTH,
+                       static_cast<uint8_t>(range));
 }
 
 /**
@@ -208,11 +208,11 @@ void ITG3200::set_full_scale_range(FullScaleRange range)
  */
 ITG3200::Bandwidth ITG3200::get_dlpf_bandwidth()
 {
-    I2Cdev::readBits(m_dev_addr,
-                     static_cast<uint8_t>(Register::DLPF_FS),
-                     DF_DLPF_CFG_BIT,
-                     DF_DLPF_CFG_LENGTH,
-                     m_buffer);
+    I2Cdev::read_bits(m_dev_addr,
+                      static_cast<uint8_t>(Register::DLPF_FS),
+                      DF_DLPF_CFG_BIT,
+                      DF_DLPF_CFG_LENGTH,
+                      m_buffer);
     return static_cast<Bandwidth>(m_buffer[0]);
 }
 
@@ -226,11 +226,11 @@ ITG3200::Bandwidth ITG3200::get_dlpf_bandwidth()
  */
 void ITG3200::set_dlpf_bandwidth(Bandwidth bandwidth)
 {
-    I2Cdev::writeBits(m_dev_addr,
-                      static_cast<uint8_t>(Register::DLPF_FS),
-                      DF_DLPF_CFG_BIT,
-                      DF_DLPF_CFG_LENGTH,
-                      static_cast<uint8_t>(bandwidth));
+    I2Cdev::write_bits(m_dev_addr,
+                       static_cast<uint8_t>(Register::DLPF_FS),
+                       DF_DLPF_CFG_BIT,
+                       DF_DLPF_CFG_LENGTH,
+                       static_cast<uint8_t>(bandwidth));
 }
 
 /**
@@ -242,7 +242,8 @@ void ITG3200::set_dlpf_bandwidth(Bandwidth bandwidth)
  */
 bool ITG3200::get_interrupt_mode()
 {
-    I2Cdev::readBit(m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_ACTL_BIT, m_buffer);
+    I2Cdev::read_bit(
+      m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_ACTL_BIT, m_buffer);
     return m_buffer[0];
 }
 
@@ -255,7 +256,7 @@ bool ITG3200::get_interrupt_mode()
  */
 void ITG3200::set_interrupt_mode(bool mode)
 {
-    I2Cdev::writeBit(m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_ACTL_BIT, mode);
+    I2Cdev::write_bit(m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_ACTL_BIT, mode);
 }
 
 /**
@@ -267,7 +268,8 @@ void ITG3200::set_interrupt_mode(bool mode)
  */
 bool ITG3200::get_interrupt_drive()
 {
-    I2Cdev::readBit(m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_OPEN_BIT, m_buffer);
+    I2Cdev::read_bit(
+      m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_OPEN_BIT, m_buffer);
     return m_buffer[0];
 }
 
@@ -280,7 +282,7 @@ bool ITG3200::get_interrupt_drive()
  */
 void ITG3200::set_interrupt_drive(bool drive)
 {
-    I2Cdev::writeBit(m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_OPEN_BIT, drive);
+    I2Cdev::write_bit(m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_OPEN_BIT, drive);
 }
 
 /**
@@ -292,7 +294,7 @@ void ITG3200::set_interrupt_drive(bool drive)
  */
 bool ITG3200::get_interrupt_latch()
 {
-    I2Cdev::readBit(
+    I2Cdev::read_bit(
       m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_LATCH_INT_EN_BIT, m_buffer);
     return m_buffer[0];
 }
@@ -306,7 +308,7 @@ bool ITG3200::get_interrupt_latch()
  */
 void ITG3200::set_interrupt_latch(bool latch)
 {
-    I2Cdev::writeBit(
+    I2Cdev::write_bit(
       m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_LATCH_INT_EN_BIT, latch);
 }
 
@@ -319,7 +321,7 @@ void ITG3200::set_interrupt_latch(bool latch)
  */
 bool ITG3200::get_interrupt_latch_clear()
 {
-    I2Cdev::readBit(
+    I2Cdev::read_bit(
       m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_INT_ANYRD_2CLEAR_BIT, m_buffer);
     return m_buffer[0];
 }
@@ -333,7 +335,7 @@ bool ITG3200::get_interrupt_latch_clear()
  */
 void ITG3200::set_interrupt_latch_clear(bool clear)
 {
-    I2Cdev::writeBit(
+    I2Cdev::write_bit(
       m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_INT_ANYRD_2CLEAR_BIT, clear);
 }
 
@@ -346,7 +348,7 @@ void ITG3200::set_interrupt_latch_clear(bool clear)
  */
 bool ITG3200::get_int_device_ready_enabled()
 {
-    I2Cdev::readBit(
+    I2Cdev::read_bit(
       m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_ITG_RDY_EN_BIT, m_buffer);
     return m_buffer[0];
 }
@@ -360,7 +362,7 @@ bool ITG3200::get_int_device_ready_enabled()
  */
 void ITG3200::set_int_device_ready_enabled(bool enabled)
 {
-    I2Cdev::writeBit(
+    I2Cdev::write_bit(
       m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_ITG_RDY_EN_BIT, enabled);
 }
 
@@ -373,7 +375,7 @@ void ITG3200::set_int_device_ready_enabled(bool enabled)
  */
 bool ITG3200::get_int_data_ready_enabled()
 {
-    I2Cdev::readBit(
+    I2Cdev::read_bit(
       m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_RAW_RDY_EN_BIT, m_buffer);
     return m_buffer[0];
 }
@@ -387,7 +389,7 @@ bool ITG3200::get_int_data_ready_enabled()
  */
 void ITG3200::set_int_data_ready_enabled(bool enabled)
 {
-    I2Cdev::writeBit(
+    I2Cdev::write_bit(
       m_dev_addr, static_cast<uint8_t>(Register::INT_CFG), INTCFG_RAW_RDY_EN_BIT, enabled);
 }
 
@@ -401,7 +403,7 @@ void ITG3200::set_int_data_ready_enabled(bool enabled)
  */
 bool ITG3200::get_int_device_ready_status()
 {
-    I2Cdev::readBit(
+    I2Cdev::read_bit(
       m_dev_addr, static_cast<uint8_t>(Register::INT_STATUS), INTSTAT_ITG_RDY_BIT, m_buffer);
     return m_buffer[0];
 }
@@ -416,7 +418,7 @@ bool ITG3200::get_int_device_ready_status()
  */
 bool ITG3200::get_int_data_ready_status()
 {
-    I2Cdev::readBit(
+    I2Cdev::read_bit(
       m_dev_addr, static_cast<uint8_t>(Register::INT_STATUS), INTSTAT_RAW_DATA_READY_BIT, m_buffer);
     return m_buffer[0];
 }
@@ -523,7 +525,7 @@ bool ITG3200::get_rotation_z(int16_t *z)
  */
 void ITG3200::reset()
 {
-    I2Cdev::writeBit(m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_H_RESET_BIT, true);
+    I2Cdev::write_bit(m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_H_RESET_BIT, true);
 }
 
 /**
@@ -540,20 +542,20 @@ void ITG3200::reset()
  */
 bool ITG3200::get_sleep_enabled()
 {
-    I2Cdev::readBit(m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_SLEEP_BIT, m_buffer);
+    I2Cdev::read_bit(m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_SLEEP_BIT, m_buffer);
     return m_buffer[0];
 }
 
 /**
  * @brief Set sleep mode status.
  * @param enabled New sleep mode enabled status
- * @see getSleepEnabled()
+ * @see get_sleep_enabled()
  * @see Register::PWR_MGM
  * @see PWR_SLEEP_BIT
  */
 void ITG3200::set_sleep_enabled(bool enabled)
 {
-    I2Cdev::writeBit(m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_SLEEP_BIT, enabled);
+    I2Cdev::write_bit(m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_SLEEP_BIT, enabled);
 }
 
 /**
@@ -565,7 +567,8 @@ void ITG3200::set_sleep_enabled(bool enabled)
  */
 bool ITG3200::get_standby_x_enabled()
 {
-    I2Cdev::readBit(m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_STBY_XG_BIT, m_buffer);
+    I2Cdev::read_bit(
+      m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_STBY_XG_BIT, m_buffer);
     return m_buffer[0];
 }
 
@@ -578,7 +581,8 @@ bool ITG3200::get_standby_x_enabled()
  */
 void ITG3200::set_standby_x_enabled(bool enabled)
 {
-    I2Cdev::writeBit(m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_STBY_XG_BIT, enabled);
+    I2Cdev::write_bit(
+      m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_STBY_XG_BIT, enabled);
 }
 
 /**
@@ -590,7 +594,8 @@ void ITG3200::set_standby_x_enabled(bool enabled)
  */
 bool ITG3200::get_standby_y_enabled()
 {
-    I2Cdev::readBit(m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_STBY_YG_BIT, m_buffer);
+    I2Cdev::read_bit(
+      m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_STBY_YG_BIT, m_buffer);
     return m_buffer[0];
 }
 
@@ -603,7 +608,8 @@ bool ITG3200::get_standby_y_enabled()
  */
 void ITG3200::set_standby_y_enabled(bool enabled)
 {
-    I2Cdev::writeBit(m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_STBY_YG_BIT, enabled);
+    I2Cdev::write_bit(
+      m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_STBY_YG_BIT, enabled);
 }
 
 /**
@@ -615,7 +621,8 @@ void ITG3200::set_standby_y_enabled(bool enabled)
  */
 bool ITG3200::get_standby_z_enabled()
 {
-    I2Cdev::readBit(m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_STBY_ZG_BIT, m_buffer);
+    I2Cdev::read_bit(
+      m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_STBY_ZG_BIT, m_buffer);
     return m_buffer[0];
 }
 
@@ -628,7 +635,8 @@ bool ITG3200::get_standby_z_enabled()
  */
 void ITG3200::set_standby_z_enabled(bool enabled)
 {
-    I2Cdev::writeBit(m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_STBY_ZG_BIT, enabled);
+    I2Cdev::write_bit(
+      m_dev_addr, static_cast<uint8_t>(Register::PWR_MGM), PWR_STBY_ZG_BIT, enabled);
 }
 
 /**
@@ -640,11 +648,11 @@ void ITG3200::set_standby_z_enabled(bool enabled)
  */
 ITG3200::ClockSource ITG3200::get_clock_source()
 {
-    I2Cdev::readBits(m_dev_addr,
-                     static_cast<uint8_t>(Register::PWR_MGM),
-                     PWR_CLK_SEL_BIT,
-                     PWR_CLK_SEL_LENGTH,
-                     m_buffer);
+    I2Cdev::read_bits(m_dev_addr,
+                      static_cast<uint8_t>(Register::PWR_MGM),
+                      PWR_CLK_SEL_BIT,
+                      PWR_CLK_SEL_LENGTH,
+                      m_buffer);
     return static_cast<ClockSource>(m_buffer[0]);
 }
 
@@ -675,9 +683,9 @@ ITG3200::ClockSource ITG3200::get_clock_source()
  */
 void ITG3200::set_clock_source(ClockSource source)
 {
-    I2Cdev::writeBits(m_dev_addr,
-                      static_cast<uint8_t>(Register::PWR_MGM),
-                      PWR_CLK_SEL_BIT,
-                      PWR_CLK_SEL_LENGTH,
-                      static_cast<uint8_t>(source));
+    I2Cdev::write_bits(m_dev_addr,
+                       static_cast<uint8_t>(Register::PWR_MGM),
+                       PWR_CLK_SEL_BIT,
+                       PWR_CLK_SEL_LENGTH,
+                       static_cast<uint8_t>(source));
 }
