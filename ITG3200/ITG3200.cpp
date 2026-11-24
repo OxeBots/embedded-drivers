@@ -36,12 +36,6 @@
 
 #include "ITG3200.h"
 
-#include "NVSManager.h"
-
-static const char * TAG = "ITG3200";
-static const char * NVS_NS = "gyro_calib";
-static const char * NVS_KEY_BLOB = "calib_blob";
-
 /** Default constructor, uses default I2C address.
  * @param address I2C address, either DEFAULT_ADDRESS or ADDRESS_ALT_HIGH
  *
@@ -66,6 +60,8 @@ void ITG3200::init()
 {
     set_full_scale_range(FullScaleRange::FS_2000);
     set_clock_source(ClockSource::PLL_XGYRO);
+    set_dlpf_bandwidth(Bandwidth::BW_42);
+    set_rate(9);
 }
 
 /**
@@ -430,11 +426,17 @@ bool ITG3200::get_int_data_ready_status()
  * @return Temperature reading in 16-bit 2's complement format
  * @see Register::TEMP_OUT_H
  */
-int16_t ITG3200::get_temperature()
+bool ITG3200::get_temperature(int16_t * temp)
 {
-    I2Cdev::readBytes(
+    int8_t result = I2Cdev::readBytes(
       m_dev_addr, static_cast<uint8_t>(Register::TEMP_OUT_H), sizeof(int16_t), m_buffer);
-    return (((int16_t)m_buffer[0]) << 8) | m_buffer[1];
+
+    if(result == 2){
+        * temp = (((int16_t)m_buffer[0]) << 8) | m_buffer[1];
+        return true;
+    }else {
+        return false;
+    }
 }
 
 /**
@@ -444,13 +446,20 @@ int16_t ITG3200::get_temperature()
  * @param z 16-bit signed integer container for Z-axis rotation
  * @see Register::GYRO_XOUT_H
  */
-void ITG3200::get_rotation(int16_t * x, int16_t * y, int16_t * z)
+bool ITG3200::get_rotation(int16_t * x, int16_t * y, int16_t * z)
 {
-    I2Cdev::readBytes(
+    int8_t result = I2Cdev::readBytes(
       m_dev_addr, static_cast<uint8_t>(Register::GYRO_XOUT_H), sizeof(int16_t) * 3, m_buffer);
-    *x = ((((int16_t)m_buffer[0]) << 8) | m_buffer[1]) - m_x_offset;
-    *y = ((((int16_t)m_buffer[2]) << 8) | m_buffer[3]) - m_y_offset;
-    *z = ((((int16_t)m_buffer[4]) << 8) | m_buffer[5]) - m_z_offset;
+
+    if(result == 6){
+        *x = ((((int16_t)m_buffer[0]) << 8) | m_buffer[1]);
+        *y = ((((int16_t)m_buffer[2]) << 8) | m_buffer[3]);
+        *z = ((((int16_t)m_buffer[4]) << 8) | m_buffer[5]);
+      return true;  
+    } else {
+        return false;
+    }
+    
 }
 
 /**
@@ -458,11 +467,16 @@ void ITG3200::get_rotation(int16_t * x, int16_t * y, int16_t * z)
  * @return X-axis rotation measurement in 16-bit 2's complement format
  * @see Register::GYRO_XOUT_H
  */
-int16_t ITG3200::get_rotation_x()
+bool ITG3200::get_rotation_x(int16_t *x)
 {
-    I2Cdev::readBytes(
+    int8_t result = I2Cdev::readBytes(
       m_dev_addr, static_cast<uint8_t>(Register::GYRO_XOUT_H), sizeof(int16_t), m_buffer);
-    return ((((int16_t)m_buffer[0]) << 8) | m_buffer[1]) - m_x_offset;
+     if(result == 2){
+      *x = ((((int16_t)m_buffer[0]) << 8) | m_buffer[1]);
+      return true;
+     } else{
+      return false;
+     } 
 }
 
 /**
@@ -470,11 +484,17 @@ int16_t ITG3200::get_rotation_x()
  * @return Y-axis rotation measurement in 16-bit 2's complement format
  * @see Register::GYRO_YOUT_H
  */
-int16_t ITG3200::get_rotation_y()
+bool ITG3200::get_rotation_y(int16_t *y)
 {
-    I2Cdev::readBytes(
+    int8_t result = I2Cdev::readBytes(
       m_dev_addr, static_cast<uint8_t>(Register::GYRO_YOUT_H), sizeof(int16_t), m_buffer);
-    return ((((int16_t)m_buffer[0]) << 8) | m_buffer[1]) - m_y_offset;
+
+    if(result == 2){
+      *y = ((((int16_t)m_buffer[0]) << 8) | m_buffer[1]);
+      return true;
+    } else {
+        return false;
+    }
 }
 
 /**
@@ -482,11 +502,17 @@ int16_t ITG3200::get_rotation_y()
  * @return Z-axis rotation measurement in 16-bit 2's complement format
  * @see Register::GYRO_ZOUT_H
  */
-int16_t ITG3200::get_rotation_z()
+bool ITG3200::get_rotation_z(int16_t *z)
 {
-    I2Cdev::readBytes(
+    int8_t result = I2Cdev::readBytes(
       m_dev_addr, static_cast<uint8_t>(Register::GYRO_ZOUT_H), sizeof(int16_t), m_buffer);
-    return ((((int16_t)m_buffer[0]) << 8) | m_buffer[1]) - m_z_offset;
+    
+    if(result == 2){
+      *z = ((((int16_t)m_buffer[0]) << 8) | m_buffer[1]);
+      return true;
+    } else {
+        return false;
+    }
 }
 
 /**
@@ -654,129 +680,4 @@ void ITG3200::set_clock_source(ClockSource source)
                       PWR_CLK_SEL_BIT,
                       PWR_CLK_SEL_LENGTH,
                       static_cast<uint8_t>(source));
-}
-
-/**
- * @brief Calibrate the Gyroscope.
- * The sensor must be STATIONARY during this process. It calculates the average bias (zero-rate
- * error) and stores it to be subtracted from future readings.
- * @param samples Number of samples to read for averaging (default 1000)
- */
-void ITG3200::calibrate(uint16_t samples)
-{
-    long sumX = 0;
-    long sumY = 0;
-    long sumZ = 0;
-
-    m_x_offset = 0;
-    m_y_offset = 0;
-    m_z_offset = 0;
-
-    int16_t rx, ry, rz;
-
-    for (uint16_t i = 0; i < samples; i++)
-    {
-        get_rotation(&rx, &ry, &rz);
-        sumX += rx;
-        sumY += ry;
-        sumZ += rz;
-        vTaskDelay(2 / portTICK_PERIOD_MS);
-    }
-
-    m_x_offset = sumX / samples;
-    m_y_offset = sumY / samples;
-    m_z_offset = sumZ / samples;
-}
-
-/**
- * @brief Set gyroscope offsets.
- * This can be used to manually set the gyroscope offsets, or to restore previously calculated
- * offsets from a prior calibration.
- *
- * @param x X-axis offset to set
- * @param y Y-axis offset to set
- * @param z Z-axis offset to set
- */
-void ITG3200::set_offsets(int16_t x, int16_t y, int16_t z)
-{
-    m_x_offset = x;
-    m_y_offset = y;
-    m_z_offset = z;
-}
-
-/**
- * @brief Get current gyroscope offsets. These are subtracted from the raw gyro readings to get the
- * final output values.
- * @param x Container for X-axis offset
- * @param y Container for Y-axis offset
- * @param z Container for Z-axis offset
- */
-void ITG3200::get_offsets(int16_t * x, int16_t * y, int16_t * z) const
-{
-    *x = m_x_offset;
-    *y = m_y_offset;
-    *z = m_z_offset;
-}
-
-/**
- * @brief Save current gyroscope calibration to NVS.
- * @return ESP_OK on success, or an error code on failure
- */
-esp_err_t ITG3200::save_calibration_to_nvs()
-{
-    int16_t data[3] = {m_x_offset, m_y_offset, m_z_offset};
-    esp_err_t err = NVSManager::save_blob(NVS_NS, NVS_KEY_BLOB, data, sizeof(data));
-    if (err == ESP_OK)
-    {
-        ESP_LOGI(TAG, "Gyroscope calibration saved to NVS.");
-    }
-    return err;
-}
-
-/**
- * @brief Load gyroscope calibration from NVS.
- * @return ESP_OK on success, or an error code on failure
- */
-esp_err_t ITG3200::load_calibration_from_nvs()
-{
-    int16_t data[3];
-    size_t req_size = sizeof(data);
-
-    esp_err_t err = NVSManager::load_blob(NVS_NS, NVS_KEY_BLOB, data, &req_size);
-    if (err == ESP_OK)
-    {
-        if (req_size == sizeof(data))
-        {
-            m_x_offset = data[0];
-            m_y_offset = data[1];
-            m_z_offset = data[2];
-            ESP_LOGI(TAG,
-                     "Loaded gyroscope calibration: Off[%d, %d, %d]",
-                     m_x_offset,
-                     m_y_offset,
-                     m_z_offset);
-            return ESP_OK;
-        }
-        else
-        {
-            ESP_LOGE(TAG, "NVS Blob size mismatch! Expected %zu, got %zu", sizeof(data), req_size);
-            return ESP_ERR_INVALID_SIZE;
-        }
-    }
-
-    if (err == ESP_ERR_NOT_FOUND)
-        ESP_LOGW(TAG, "Gyroscope calibration not found in NVS.");
-
-    return err;
-}
-
-/**
- * @brief Check if the gyroscope has been calibrated (i.e., if offsets are non-zero).
- * @return True if calibrated, false otherwise
- */
-bool ITG3200::is_calibrated() const
-{
-    return !(m_x_offset == 0 &&  //
-             m_y_offset == 0 &&  //
-             m_z_offset == 0);
 }

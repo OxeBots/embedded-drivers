@@ -3,6 +3,7 @@
 
 #include <driver/gpio.h>
 #include <sdkconfig.h>
+#include <cstdint>
 
 static const char * TAG = "IMUGY85";
 
@@ -140,9 +141,14 @@ void IMUGY85::read_acceleration(int16_t * x, int16_t * y, int16_t * z)
  * @param y Output pointer for Y axis
  * @param z Output pointer for Z axis
  */
-void IMUGY85::read_gyro(int16_t * x, int16_t * y, int16_t * z)
+void IMUGY85::read_gyro(int16_t * x, int16_t * y, int16_t * z, int16_t * temp)
 {
-    m_gyro.get_rotation(x, y, z);
+    bool result_rot = m_gyro.get_rotation(x, y, z);
+    bool result_temp = m_gyro.get_temperature(temp);
+
+    if(!result_rot && !result_temp){
+        ESP_LOGE(TAG, "Failed to get gyro temp and/or rotation");
+    }
 }
 
 /**
@@ -169,22 +175,6 @@ Vector3f IMUGY85::read_acceleration_calibrated()
     result.x = (static_cast<float>(raw_x) * m_a_res - m_accel_offset.x) * m_accel_scale.x;
     result.y = (static_cast<float>(raw_y) * m_a_res - m_accel_offset.y) * m_accel_scale.y;
     result.z = (static_cast<float>(raw_z) * m_a_res - m_accel_offset.z) * m_accel_scale.z;
-    return result;
-}
-
-/**
- * Read calibrated gyroscope data (in deg/s).
- * @return Vector3f with calibrated gyro values
- */
-Vector3f IMUGY85::read_gyro_calibrated()
-{
-    int16_t raw_x, raw_y, raw_z;
-    read_gyro(&raw_x, &raw_y, &raw_z);
-
-    Vector3f result;
-    result.x = (static_cast<float>(raw_x) * m_g_res - m_gyro_offset.x) * m_gyro_scale.x;
-    result.y = (static_cast<float>(raw_y) * m_g_res - m_gyro_offset.y) * m_gyro_scale.y;
-    result.z = (static_cast<float>(raw_z) * m_g_res - m_gyro_offset.z) * m_gyro_scale.z;
     return result;
 }
 

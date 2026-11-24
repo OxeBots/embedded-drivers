@@ -1,11 +1,7 @@
 #ifndef _ADXL345_H_
 #define _ADXL345_H_
 
-#include <esp_err.h>
-#include <esp_log.h>
-#include <esp_timer.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
+#include <cstdint>
 
 #include "I2Cdev.h"
 
@@ -54,16 +50,16 @@ class ADXL345
     {
         RNG_2G = 0x00,
         RNG_4G = 0x01,
-        RNG_8G = 0x10,
-        RNG_16G = 0x11
+        RNG_8G = 0x02,
+        RNG_16G = 0x03
     };
 
     enum class FifoMode : uint8_t
     {
         BYPASS = 0x00,
         FIFO = 0x01,
-        STREAM = 0x10,
-        TRIGGER = 0x11
+        STREAM = 0x02,
+        TRIGGER = 0x03
     };
 
     // Constant Bit positions
@@ -123,19 +119,6 @@ class ADXL345
 
     void init();
     bool test_connection();
-
-    // Calibration
-    void calibrate();
-    void clear_calibration();
-    void set_calibration_offsets(float x, float y, float z);
-    void set_calibration_scales(float x, float y, float z);
-    float get_calibration_offset(uint8_t index) const;
-    float get_calibration_scale(uint8_t index) const;
-
-    // NVS Persistence
-    esp_err_t save_calibration_to_nvs();
-    esp_err_t load_calibration_from_nvs();
-    bool is_calibrated() const;
 
     // DEVID register
     uint8_t get_device_id();
@@ -322,8 +305,6 @@ class ADXL345
    private:
     uint8_t m_dev_addr;
     uint8_t m_buffer[6] = {0};
-    float m_cal_offset[3] = {0.F, 0.F, 0.F};
-    float m_cal_scale[3] = {1.F, 1.F, 1.F};
 };
 
 #endif  // _ADXL345_H_

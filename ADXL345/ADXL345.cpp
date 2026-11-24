@@ -36,12 +36,6 @@
 
 #include "ADXL345.h"
 
-#include "NVSManager.h"
-
-static const char * TAG = "ADXL345";
-static const char * NVS_NS = "accel_calib";
-static const char * NVS_KEY_BLOB = "calib_blob";
-
 /**
  * @brief Specific address constructor.
  * @param address I2C address
@@ -51,7 +45,7 @@ static const char * NVS_KEY_BLOB = "calib_blob";
  */
 ADXL345::ADXL345(uint8_t address) : m_dev_addr(address)
 {
-    clear_calibration();
+    
 }
 
 /**
@@ -798,6 +792,7 @@ void ADXL345::set_tap_axis_y_enabled(bool enabled)
  * @see Register::TAP_AXES
  * @see TAPAXIS_Z_BIT
  */
+
 bool ADXL345::get_tap_axis_z_enabled()
 {
     I2Cdev::readBit(m_dev_addr, static_cast<uint8_t>(Register::TAP_AXES), TAPAXIS_Z_BIT, m_buffer);
@@ -2128,224 +2123,4 @@ uint8_t ADXL345::get_fifo_length()
                      FIFOSTAT_LENGTH_LENGTH,
                      m_buffer);
     return m_buffer[0];
-}
-
-/**
- * @brief Clear calibration data.
- * This sets all calibration offsets to 0 and all calibration scales to 1.
- */
-void ADXL345::clear_calibration()
-{
-    m_cal_offset[0] = 0.0f;
-    m_cal_offset[1] = 0.0f;
-    m_cal_offset[2] = 0.0f;
-    m_cal_scale[0] = 1.0f;
-    m_cal_scale[1] = 1.0f;
-    m_cal_scale[2] = 1.0f;
-}
-
-/**
- * @brief Set calibration offsets.
- * Calibration offsets are added to raw acceleration values after scaling. This
- * can be used to correct for sensor bias.
- *
- * @param x X-axis offset
- * @param y Y-axis offset
- * @param z Z-axis offset
- */
-void ADXL345::set_calibration_offsets(float x, float y, float z)
-{
-    m_cal_offset[0] = x;
-    m_cal_offset[1] = y;
-    m_cal_offset[2] = z;
-}
-
-/**
- * @brief Set calibration scales.
- * Calibration scales are multiplied with raw acceleration values after adding offsets.
- * This can be used to correct for sensor sensitivity variations.
- *
- * @param x X-axis scale
- * @param y Y-axis scale
- * @param z Z-axis scale
- */
-void ADXL345::set_calibration_scales(float x, float y, float z)
-{
-    m_cal_scale[0] = x;
-    m_cal_scale[1] = y;
-    m_cal_scale[2] = z;
-}
-
-/**
- * @brief Get calibration offset for a specific axis.
- * @param index Axis index (0 for X, 1 for Y, 2 for Z)
- * @return Calibration offset for the specified axis, or 0.0f if index is out of range
- */
-float ADXL345::get_calibration_offset(uint8_t index) const
-{
-    return (index < 3) ? m_cal_offset[index] : 0.0f;
-}
-
-/**
- * @brief Get calibration scale for a specific axis.
- * @param index Axis index (0 for X, 1 for Y, 2 for Z)
- * @return Calibration scale for the specified axis, or 1.0f if index is out of range
- */
-float ADXL345::get_calibration_scale(uint8_t index) const
-{
-    return (index < 3) ? m_cal_scale[index] : 1.0f;
-}
-
-/**
- * Perform offset calibration. Assumes the sensor is placed flat on a level surface (Z-axis = 1g).
- * Calculates offsets for X, Y, and Z and writes them to the OFS registers.
- * @param samples Number of samples to take for averaging (default 100)
- */
-void ADXL345::calibrate()
-{
-    clear_calibration();
-
-    set_offset_x(0);
-    set_offset_y(0);
-    set_offset_z(0);
-
-    int16_t x, y, z;
-    int16_t minX = 32000, maxX = -32000;
-    int16_t minY = 32000, maxY = -32000;
-    int16_t minZ = 32000, maxZ = -32000;
-
-    const int16_t SPAN_THRESHOLD = 500;
-    bool is_calibrating = true;
-
-    while (is_calibrating)
-    {
-        get_acceleration(&x, &y, &z);
-
-        if (y == 0 && z == 0)
-        {
-            if (x < minX)
-                minX = x;
-            if (x > maxX)
-                maxX = x;
-        }
-        if (x == 0 && z == 0)
-        {
-            if (y < minY)
-                minY = y;
-            if (y > maxY)
-                maxY = y;
-        }
-        if (x == 0 && y == 0)
-        {
-            if (z < minZ)
-                minZ = z;
-            if (z > maxZ)
-                maxZ = z;
-        }
-
-        bool xReady = (maxX - minX) > SPAN_THRESHOLD;
-        bool yReady = (maxY - minY) > SPAN_THRESHOLD;
-        bool zReady = (maxZ - minZ) > SPAN_THRESHOLD;
-
-        if (xReady && yReady && zReady)
-            is_calibrating = false;
-
-        vTaskDelay(10 / portTICK_PERIOD_MS);
-    }
-
-    float offX = (static_cast<float>(maxX) + static_cast<float>(minX)) / (256.0f * 2.0f);
-    float offY = (static_cast<float>(maxY) + static_cast<float>(minY)) / (256.0f * 2.0f);
-    float offZ = (static_cast<float>(maxZ) + static_cast<float>(minZ)) / (256.0f * 2.0f);
-
-    set_calibration_offsets(offX, offY, offZ);
-
-    float target = 256.0f;
-    float semiRangeX = (static_cast<float>(maxX) - static_cast<float>(minX)) / 2.0f;
-    float semiRangeY = (static_cast<float>(maxY) - static_cast<float>(minY)) / 2.0f;
-    float semiRangeZ = (static_cast<float>(maxZ) - static_cast<float>(minZ)) / 2.0f;
-
-    if (semiRangeX > 0)
-        m_cal_scale[0] = target / semiRangeX;
-    if (semiRangeY > 0)
-        m_cal_scale[1] = target / semiRangeY;
-    if (semiRangeZ > 0)
-        m_cal_scale[2] = target / semiRangeZ;
-}
-
-/**
- * @brief Save calibration data to NVS.
- * @return ESP_OK on success, or an error code on failure
- */
-esp_err_t ADXL345::save_calibration_to_nvs()
-{
-    float data[6] = {m_cal_offset[0],
-                     m_cal_offset[1],
-                     m_cal_offset[2],
-                     m_cal_scale[0],
-                     m_cal_scale[1],
-                     m_cal_scale[2]};
-    esp_err_t err = NVSManager::save_blob(NVS_NS, NVS_KEY_BLOB, data, sizeof(data));
-
-    if (err == ESP_OK)
-        ESP_LOGI(TAG, "Accelerometer calibration saved to NVS.");
-
-    return err;
-}
-
-/**
- * @brief Load calibration data from NVS.
- * @return ESP_OK on success, or an error code on failure
- */
-esp_err_t ADXL345::load_calibration_from_nvs()
-{
-    float data[6];
-    size_t req_size = sizeof(data);
-
-    esp_err_t err = NVSManager::load_blob(NVS_NS, NVS_KEY_BLOB, data, &req_size);
-    if (err == ESP_OK)
-    {
-        if (req_size == sizeof(data))
-        {
-            m_cal_offset[0] = data[0];
-            m_cal_offset[1] = data[1];
-            m_cal_offset[2] = data[2];
-            m_cal_scale[0] = data[3];
-            m_cal_scale[1] = data[4];
-            m_cal_scale[2] = data[5];
-            ESP_LOGI(
-              TAG,
-              "Loaded accelerometer calibration: Off[%.2f, %.2f, %.2f] Scl[%.2f, %.2f, %.2f]",
-              m_cal_offset[0],
-              m_cal_offset[1],
-              m_cal_offset[2],
-              m_cal_scale[0],
-              m_cal_scale[1],
-              m_cal_scale[2]);
-            return ESP_OK;
-        }
-        else
-        {
-            ESP_LOGE(TAG, "NVS Blob size mismatch! Expected %zu, got %zu", sizeof(data), req_size);
-            return ESP_ERR_INVALID_SIZE;
-        }
-    }
-
-    if (err == ESP_ERR_NOT_FOUND)
-        ESP_LOGW(TAG, "Accelerometer calibration not found in NVS.");
-
-    return err;
-}
-
-/**
- * @brief Check if calibration data is set (i.e., not default).
- * @return True if calibration data is set, false if it is still at default values
- */
-bool ADXL345::is_calibrated() const
-{
-    return !(m_cal_scale[0] == 1.0f &&   //
-             m_cal_scale[1] == 1.0f &&   //
-             m_cal_scale[2] == 1.0f &&   //
-             m_cal_offset[0] == 0.0f &&  //
-             m_cal_offset[1] == 0.0f &&  //
-             m_cal_offset[2] == 0.0f);
 }

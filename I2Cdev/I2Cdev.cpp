@@ -127,6 +127,7 @@ i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t devAddr, uint32_t scl_
  * @param read_len Number of bytes to read
  * @return ESP_OK on success, error code otherwise
  */
+
 esp_err_t I2Cdev::perform_transaction(
   uint8_t devAddr, uint8_t * write_buffer, size_t write_len, uint8_t * read_buffer, size_t read_len)
 {
@@ -157,6 +158,7 @@ esp_err_t I2Cdev::perform_transaction(
  * class value in I2Cdev::readTimeout)
  * @return Status of read operation (true = success)
  */
+
 int8_t I2Cdev::readBit(
   uint8_t devAddr, uint8_t regAddr, uint8_t bitNum, uint8_t * data, uint16_t timeout)
 {
@@ -208,6 +210,7 @@ int8_t I2Cdev::readBits(uint8_t devAddr,
  * class value in I2Cdev::readTimeout)
  * @return Status of read operation (true = success)
  */
+
 int8_t I2Cdev::readByte(uint8_t devAddr, uint8_t regAddr, uint8_t * data, uint16_t timeout)
 {
     return readBytes(devAddr, regAddr, 1, data, timeout);

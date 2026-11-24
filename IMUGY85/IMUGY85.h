@@ -4,6 +4,7 @@
 #include <driver/i2c_master.h>
 #include <esp_log.h>
 #include <stdint.h>
+#include <cstdint>
 
 #include "ADXL345.h"
 #include "ITG3200.h"
@@ -29,13 +30,11 @@ class IMUGY85
 
     void read_acceleration(int16_t * x, int16_t * y, int16_t * z);
 
-    void read_gyro(int16_t * x, int16_t * y, int16_t * z);
+    void read_gyro(int16_t * x, int16_t * y, int16_t * z, int16_t * temp);
 
     void read_magnetometer(int16_t * x, int16_t * y, int16_t * z);
 
     Vector3f read_acceleration_calibrated();
-
-    Vector3f read_gyro_calibrated();
 
     Vector3f read_magnetometer_calibrated();
 

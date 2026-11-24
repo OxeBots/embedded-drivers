@@ -1,11 +1,7 @@
 #ifndef _ITG3200_H_
 #define _ITG3200_H_
 
-#include <esp_err.h>
-#include <esp_log.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-
+#include <cstdint>
 #include "I2Cdev.h"
 
 class ITG3200
@@ -86,16 +82,6 @@ class ITG3200
     void init();
     bool test_connection();
 
-    // Calibration
-    void calibrate(uint16_t samples = 1000);
-    void set_offsets(int16_t x, int16_t y, int16_t z);
-    void get_offsets(int16_t * x, int16_t * y, int16_t * z) const;
-
-    // NVS Persistence
-    esp_err_t save_calibration_to_nvs();
-    esp_err_t load_calibration_from_nvs();
-    bool is_calibrated() const;
-
     // WHO_AM_I register
     uint8_t get_device_id();
     void set_device_id(uint8_t id);
@@ -129,13 +115,13 @@ class ITG3200
     bool get_int_data_ready_status();
 
     // TEMP_OUT_* registers
-    int16_t get_temperature();
+    bool get_temperature(int16_t * temp);
 
     // GYRO_*OUT_* registers
-    void get_rotation(int16_t * x, int16_t * y, int16_t * z);
-    int16_t get_rotation_x();
-    int16_t get_rotation_y();
-    int16_t get_rotation_z();
+    bool get_rotation(int16_t * x, int16_t * y, int16_t * z);
+    bool get_rotation_x(int16_t * x);
+    bool get_rotation_y(int16_t * y);
+    bool get_rotation_z(int16_t * z);
 
     // PWR_MGM register
     void reset();
@@ -153,11 +139,6 @@ class ITG3200
    private:
     uint8_t m_dev_addr;
     uint8_t m_buffer[6] = {0};
-
-    // Offsets
-    int16_t m_x_offset = 0;
-    int16_t m_y_offset = 0;
-    int16_t m_z_offset = 0;
 };
 
 #endif  // _ITG3200_H_
