@@ -42,7 +42,7 @@ bool kicker_is_charging(uint8_t status);
 bool kicker_is_kicking(uint8_t status);
 bool kicker_is_bleeder_enabled(uint8_t status);
 bool kicker_has_fault(uint8_t status);
-bool kicker_is_hardware_ov_trip(uint8_t status);
+bool kicker_has_hardware_ov_trip(uint8_t status);
 bool kicker_has_ov_trip(uint8_t status);
 bool kicker_has_i2c_reg_error(uint8_t status);
 bool kicker_has_i2c_value_error(uint8_t status);

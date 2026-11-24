@@ -216,7 +216,7 @@ bool kicker_has_fault(uint8_t status)
     return kicker_check_status(status, KICKER_BOARD_STATUS_FAULT);
 }
 
-bool kicker_is_hardware_ov_trip(uint8_t status)
+bool kicker_has_hardware_ov_trip(uint8_t status)
 {
     return kicker_check_status(status, KICKER_BOARD_STATUS_HARDWARE_OV_TRIP);
 }
