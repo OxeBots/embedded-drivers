@@ -23,7 +23,7 @@
 #define KICKER_BOARD_STATUS_KICK                 (1U << 1)
 #define KICKER_BOARD_STATUS_BLEEDER              (1U << 2)
 #define KICKER_BOARD_STATUS_FAULT                (1U << 3)
-#define KICKER_BOARD_STATUS_DONE                 (1U << 4)
+#define KICKER_BOARD_STATUS_HARDWARE_OV_TRIP     (1U << 4)
 #define KICKER_BOARD_STATUS_OV_TRIP              (1U << 5)
 #define KICKER_BOARD_STATUS_I2C_LAST_REG_ERROR   (1U << 6)
 #define KICKER_BOARD_STATUS_I2C_LAST_VALUE_ERROR (1U << 7)
