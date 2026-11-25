@@ -2,7 +2,9 @@
 #include "IMUGY85.h"
 
 #include <driver/gpio.h>
+#include <esp_rom_sys.h>
 #include <sdkconfig.h>
+
 #include <cstdint>
 
 static const char * TAG = "IMUGY85";
@@ -43,6 +45,32 @@ esp_err_t IMUGY85::init()
     {
         ESP_LOGE(TAG, "Failed to create I2C master bus: %s", esp_err_to_name(err));
         return err;
+    }
+
+    // A peripheral can hold the bus low across an ESP32 reset. Try clearing it
+    // once before registering any devices so an unusable bus cannot stall boot.
+    esp_rom_delay_us(100);
+    if (gpio_get_level(i2c_cfg.sda_io_num) == 0 || gpio_get_level(i2c_cfg.scl_io_num) == 0)
+    {
+        err = i2c_master_bus_reset(m_i2c_bus);
+        esp_rom_delay_us(100);
+        const int sda_level = gpio_get_level(i2c_cfg.sda_io_num);
+        const int scl_level = gpio_get_level(i2c_cfg.scl_io_num);
+        if (err != ESP_OK || sda_level == 0 || scl_level == 0)
+        {
+            ESP_LOGE(TAG,
+                     "I2C bus unavailable after recovery: SDA GPIO %d=%d, SCL GPIO %d=%d (%s).",
+                     i2c_cfg.sda_io_num,
+                     sda_level,
+                     i2c_cfg.scl_io_num,
+                     scl_level,
+                     esp_err_to_name(err));
+            esp_err_t delete_result = i2c_del_master_bus(m_i2c_bus);
+            if (delete_result != ESP_OK)
+                ESP_LOGW(TAG, "Failed to release I2C bus: %s", esp_err_to_name(delete_result));
+            m_i2c_bus = nullptr;
+            return err == ESP_OK ? ESP_ERR_TIMEOUT : err;
+        }
     }
 
     I2Cdev::init(m_i2c_bus);

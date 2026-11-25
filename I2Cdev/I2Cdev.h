@@ -36,7 +36,7 @@
 #include <driver/i2c_master.h>
 #include <esp_err.h>
 
-#define I2CDEV_DEFAULT_READ_TIMEOUT 1000
+#define I2CDEV_DEFAULT_READ_TIMEOUT 30
 #define I2CDEV_MAX_CACHED_DEVICES 8
 
 typedef struct
@@ -104,7 +104,8 @@ class I2Cdev
                                          uint8_t * write_buffer,
                                          size_t write_len,
                                          uint8_t * read_buffer,
-                                         size_t read_len);
+                                         size_t read_len,
+                                         int timeout_ms);
 };
 
 #endif  // _I2CDEV_H_

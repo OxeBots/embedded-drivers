@@ -125,6 +125,7 @@ i2c_master_dev_handle_t I2Cdev::get_device_handle(uint8_t dev_addr, uint32_t scl
  * @param write_len Number of bytes to write
  * @param read_buffer Buffer to store read data
  * @param read_len Number of bytes to read
+ * @param timeout_ms Transaction timeout in milliseconds.
  * @return ESP_OK on success, error code otherwise
  */
 
@@ -132,7 +133,8 @@ esp_err_t I2Cdev::perform_transaction(uint8_t dev_addr,
                                       uint8_t * write_buffer,
                                       size_t write_len,
                                       uint8_t * read_buffer,
-                                      size_t read_len)
+                                      size_t read_len,
+                                      int timeout_ms)
 {
     i2c_master_dev_handle_t dev_handle = get_device_handle(dev_addr);
 
@@ -143,12 +145,12 @@ esp_err_t I2Cdev::perform_transaction(uint8_t dev_addr,
     {
         // Write Register Address -> Restart -> Read Data
         return i2c_master_transmit_receive(
-          dev_handle, write_buffer, write_len, read_buffer, read_len, -1);
+          dev_handle, write_buffer, write_len, read_buffer, read_len, timeout_ms);
     }
     else
     {
         // Write Only
-        return i2c_master_transmit(dev_handle, write_buffer, write_len, -1);
+        return i2c_master_transmit(dev_handle, write_buffer, write_len, timeout_ms);
     }
 }
 
@@ -166,8 +168,9 @@ int8_t I2Cdev::read_bit(
   uint8_t dev_addr, uint8_t reg_addr, uint8_t bit_num, uint8_t * data, uint16_t timeout)
 {
     uint8_t b;
-    uint8_t count = read_byte(dev_addr, reg_addr, &b, timeout);
-    *data = b & (1 << bit_num);
+    const int8_t count = read_byte(dev_addr, reg_addr, &b, timeout);
+    if (count != 0)
+        *data = b & (1 << bit_num);
     return count;
 }
 
@@ -231,7 +234,8 @@ int8_t I2Cdev::read_byte(uint8_t dev_addr, uint8_t reg_addr, uint8_t * data, uin
 int8_t I2Cdev::read_bytes(
   uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t * data, uint16_t timeout)
 {
-    esp_err_t err = perform_transaction(dev_addr, &reg_addr, 1, data, length);
+    const int timeout_ms = timeout == 0 ? -1 : timeout;
+    esp_err_t err = perform_transaction(dev_addr, &reg_addr, 1, data, length, timeout_ms);
     return (err == ESP_OK) ? length : 0;
 }
 
@@ -266,7 +270,8 @@ int8_t I2Cdev::read_word(uint8_t dev_addr, uint8_t reg_addr, uint16_t * data, ui
 bool I2Cdev::write_bit(uint8_t dev_addr, uint8_t reg_addr, uint8_t bit_num, uint8_t data)
 {
     uint8_t b;
-    read_byte(dev_addr, reg_addr, &b);
+    if (read_byte(dev_addr, reg_addr, &b) == 0)
+        return false;
     b = (data != 0) ? (b | (1 << bit_num)) : (b & ~(1 << bit_num));
     return write_byte(dev_addr, reg_addr, b);
 }
@@ -311,7 +316,7 @@ bool I2Cdev::write_bits(
 bool I2Cdev::write_byte(uint8_t dev_addr, uint8_t reg_addr, uint8_t data)
 {
     uint8_t buffer[2] = {reg_addr, data};
-    return perform_transaction(dev_addr, buffer, 2, NULL, 0) == ESP_OK;
+    return perform_transaction(dev_addr, buffer, 2, NULL, 0, I2CDEV_DEFAULT_READ_TIMEOUT) == ESP_OK;
 }
 
 /** Write single word to a 16-bit device register.
@@ -323,7 +328,7 @@ bool I2Cdev::write_byte(uint8_t dev_addr, uint8_t reg_addr, uint8_t data)
 bool I2Cdev::write_word(uint8_t dev_addr, uint8_t reg_addr, uint16_t data)
 {
     uint8_t buffer[3] = {reg_addr, (uint8_t)(data >> 8), (uint8_t)(data & 0xff)};
-    return perform_transaction(dev_addr, buffer, 3, NULL, 0) == ESP_OK;
+    return perform_transaction(dev_addr, buffer, 3, NULL, 0, I2CDEV_DEFAULT_READ_TIMEOUT) == ESP_OK;
 }
 
 /** Write multiple bytes to an 8-bit device register.
@@ -343,7 +348,8 @@ bool I2Cdev::write_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uin
     buffer[0] = reg_addr;
     memcpy(buffer + 1, data, length);
 
-    esp_err_t err = perform_transaction(dev_addr, buffer, length + 1, NULL, 0);
+    esp_err_t err =
+      perform_transaction(dev_addr, buffer, length + 1, NULL, 0, I2CDEV_DEFAULT_READ_TIMEOUT);
 
     free(buffer);
     return err == ESP_OK;

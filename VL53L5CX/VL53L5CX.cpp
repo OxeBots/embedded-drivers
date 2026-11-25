@@ -35,6 +35,24 @@ esp_err_t VL53L5CX::init()
     if (m_initialized)
         return ESP_ERR_INVALID_STATE;
 
+    const i2c_master_bus_handle_t bus = I2Cdev::get_bus_handle();
+    if (bus == nullptr)
+        return ESP_ERR_INVALID_STATE;
+    esp_err_t probe = ESP_ERR_NOT_FOUND;
+    for (uint8_t attempt = 0; attempt < 3; ++attempt)
+    {
+        probe = i2c_master_probe(bus, m_dev_addr >> 1, I2CDEV_DEFAULT_READ_TIMEOUT);
+        if (probe != ESP_ERR_NOT_FOUND || attempt == 2)
+            break;
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    if (probe != ESP_OK)
+    {
+        ESP_LOGW(
+          TAG, "VL53L5CX probe at 0x%02X failed: %s", m_dev_addr >> 1, esp_err_to_name(probe));
+        return probe;
+    }
+
     // 1 MHz: ranging frames are large and the sensor supports fast-mode plus.
     i2c_master_dev_handle_t dev_handle = I2Cdev::get_device_handle(m_dev_addr >> 1, 1000000);
     if (dev_handle == nullptr)
