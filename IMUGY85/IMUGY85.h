@@ -23,6 +23,7 @@ class IMUGY85
    public:
     static IMUGY85 & get_instance();
 
+    esp_err_t init_i2c_bus();
     esp_err_t init();
     i2c_master_bus_handle_t get_i2c_bus() const;
     bool is_initialized() const;

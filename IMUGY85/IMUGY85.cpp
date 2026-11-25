@@ -20,15 +20,13 @@ IMUGY85::IMUGY85() : m_i2c_bus(nullptr)
 }
 
 /**
- * Initialize I2C bus and all IMU sensors.
- * @return ESP_OK on success
+ * Initialize the shared bus without probing the IMU sensors.
  */
-esp_err_t IMUGY85::init()
+esp_err_t IMUGY85::init_i2c_bus()
 {
-    if (m_initialized)
+    if (m_i2c_bus != nullptr)
         return ESP_OK;
 
-    // ---- I2C master bus ----
     i2c_master_bus_config_t i2c_cfg = {
       .i2c_port = static_cast<i2c_port_t>(CONFIG_I2C_PORT_NUM),
       .sda_io_num = static_cast<gpio_num_t>(CONFIG_SDA_GPIO),
@@ -75,6 +73,21 @@ esp_err_t IMUGY85::init()
 
     I2Cdev::init(m_i2c_bus);
     ESP_LOGI(TAG, "I2C bus initialized (SDA=%d, SCL=%d).", CONFIG_SDA_GPIO, CONFIG_SCL_GPIO);
+    return ESP_OK;
+}
+
+/**
+ * Initialize I2C bus and all IMU sensors.
+ * @return ESP_OK on success
+ */
+esp_err_t IMUGY85::init()
+{
+    if (m_initialized)
+        return ESP_OK;
+
+    esp_err_t err = init_i2c_bus();
+    if (err != ESP_OK)
+        return err;
 
     // ---- Initialize individual sensors ----
     m_accel.init();
