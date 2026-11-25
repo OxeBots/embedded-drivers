@@ -152,7 +152,7 @@ esp_err_t BL48250::configure(const MotorDriverConfig & config)
 
         directions_[i] = MOTOR_CW;
         duty_cycles_[i] = 0;
-        zero_duty_since_us_[i] = esp_timer_get_time();
+        reversal_start_us_[i] = 0;
     }
 
     uint8_t direction_value = 0;
@@ -212,25 +212,24 @@ void BL48250::deinit()
 }
 
 /**
- * @brief Apply one open-loop output. The caller is responsible for rotor standstill.
+ * @brief Apply open-loop outputs, waiting for any requested direction changes.
  */
 void BL48250::set_duties(const std::array<uint32_t, 4> & duties,
                          const std::array<uint8_t, 4> & directions)
 {
-    if (directions != directions_)
+    update_duties(duties, directions);
+    if (m_configured && directions != directions_)
     {
-        set_duties(duties, directions, 0);
-        vTaskDelay(pdMS_TO_TICKS(DIRECTION_CHANGE_STOP_US / 1000) + 1);
+        vTaskDelay(pdMS_TO_TICKS(DIRECTION_CHANGE_DELAY_US / 1000) + 1);
+        update_duties(duties, directions);
     }
-    set_duties(duties, directions, 0x0F);
 }
 
 /**
- * @brief Stop reversing motors before latching their requested direction.
+ * @brief Disable drive during the delay before latching a motor's new direction.
  */
-void BL48250::set_duties(const std::array<uint32_t, 4> & duties,
-                         const std::array<uint8_t, 4> & directions,
-                         uint8_t standstill_mask)
+void BL48250::update_duties(const std::array<uint32_t, 4> & duties,
+                            const std::array<uint8_t, 4> & directions)
 {
     if (!m_configured)
         return;
@@ -243,13 +242,15 @@ void BL48250::set_duties(const std::array<uint32_t, 4> & duties,
     {
         if (directions[i] == directions_[i])
             continue;
+        write_duty(i, 0);
         if (duty_cycles_[i] != 0)
+            continue;
+        if (reversal_start_us_[i] == 0)
         {
-            write_duty(i, 0);
+            reversal_start_us_[i] = esp_timer_get_time();
             continue;
         }
-        if ((standstill_mask & (1U << i)) == 0 ||
-            now_us - zero_duty_since_us_[i] < DIRECTION_CHANGE_STOP_US)
+        if (now_us - reversal_start_us_[i] < DIRECTION_CHANGE_DELAY_US)
             continue;
         const uint8_t bit = static_cast<uint8_t>(1U << direction_bits_[i]);
         change_mask |= bit;
@@ -273,12 +274,15 @@ void BL48250::set_duties(const std::array<uint32_t, 4> & duties,
     for (size_t i = 0; i < duties.size(); ++i)
     {
         if (directions[i] == directions_[i])
+        {
+            reversal_start_us_[i] = 0;
             write_duty(i, std::min(duties[i], max_duty_));
+        }
     }
 }
 
 /**
- * @brief Write changed duty and record when the hardware was disabled.
+ * @brief Write changed duty to the hardware.
  */
 void BL48250::write_duty(size_t motor, uint32_t duty)
 {
@@ -291,8 +295,6 @@ void BL48250::write_duty(size_t motor, uint32_t duty)
         return;
     }
     duty_cycles_[motor] = duty;
-    if (duty == 0)
-        zero_duty_since_us_[motor] = esp_timer_get_time();
 }
 
 std::array<int32_t, 4> BL48250::pulse_counts() const

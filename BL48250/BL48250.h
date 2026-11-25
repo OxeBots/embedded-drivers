@@ -73,11 +73,9 @@ class BL48250
     void set_duties(const std::array<uint32_t, 4> & duties,
                     const std::array<uint8_t, 4> & directions);
 
-    // Called each control tick. Each bit confirms standstill for one motor.
-    // A pending reversal leaves that motor's duty at zero.
-    void set_duties(const std::array<uint32_t, 4> & duties,
-                    const std::array<uint8_t, 4> & directions,
-                    uint8_t standstill_mask);
+    // Called each control tick. Holds a reversing motor's duty at zero for 10 ms.
+    void update_duties(const std::array<uint32_t, 4> & duties,
+                       const std::array<uint8_t, 4> & directions);
 
     // Wheel-shaft angular velocity (rad/s) of one motor from a sliding window
     // over its pulse counter, recomputed without consuming counts. Returns
@@ -115,7 +113,7 @@ class BL48250
 
     std::array<uint8_t, 4> directions_;
     std::array<uint32_t, 4> duty_cycles_;
-    std::array<int64_t, 4> zero_duty_since_us_ = {};
+    std::array<int64_t, 4> reversal_start_us_ = {};
 
     void write_duty(size_t motor, uint32_t duty);
 
@@ -138,10 +136,8 @@ class BL48250
     static constexpr size_t PULSE_RING_SIZE = 32;
     static constexpr int64_t PULSE_RING_PUSH_INTERVAL_US = 5000;
 
-    // The module only accepts a direction change while its PWM input is
-    // inactive. Keep the affected motors stopped for this long before moving
-    // the DIR lines.
-    static constexpr uint32_t DIRECTION_CHANGE_STOP_US = 5000;
+    // Keep the PWM input inactive for this interval before changing direction.
+    static constexpr uint32_t DIRECTION_CHANGE_DELAY_US = 10000;
 
     std::array<gpio_num_t, 4> motor_fb_pins_;
     std::array<pcnt_unit_handle_t, 4> pcnt_units_;
