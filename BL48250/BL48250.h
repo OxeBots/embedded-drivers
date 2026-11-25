@@ -138,6 +138,9 @@ class BL48250
 
     // Keep the PWM input inactive for this interval before changing direction.
     static constexpr uint32_t DIRECTION_CHANGE_DELAY_US = 10000;
+    // Ignore pulse-counter velocity for this interval after a direction flip so
+    // coasting pulses in the old direction are not reported with the new sign.
+    static constexpr int64_t PULSE_REVERSAL_BLANKING_US = 150000;
 
     std::array<gpio_num_t, 4> motor_fb_pins_;
     std::array<pcnt_unit_handle_t, 4> pcnt_units_;
@@ -146,6 +149,7 @@ class BL48250
     std::array<size_t, 4> m_pulse_ring_count_;
     std::array<size_t, 4> m_pulse_ring_head_;
     std::array<int64_t, 4> m_last_ring_push_us_;
+    std::array<int64_t, 4> m_last_dir_change_us_ = {};
     std::array<bool, 4> m_pulse_read_error_logged_ = {};
     bool m_fb_configured;
     SemaphoreHandle_t m_fb_mutex;

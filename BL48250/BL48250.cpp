@@ -264,6 +264,16 @@ void BL48250::update_duties(const std::array<uint32_t, 4> & duties,
         if (direction_shift_register_->update_mask(change_mask, change_value) == ESP_OK)
         {
             xSemaphoreTake(m_fb_mutex, portMAX_DELAY);
+            for (size_t i = 0; i < directions_.size(); ++i)
+            {
+                if (next_directions[i] != directions_[i])
+                {
+                    m_last_dir_change_us_[i] = now_us;
+                    m_pulse_ring_count_[i] = 0;
+                    m_pulse_ring_head_[i] = 0;
+                    m_last_ring_push_us_[i] = 0;
+                }
+            }
             directions_ = next_directions;
             xSemaphoreGive(m_fb_mutex);
         }
@@ -352,6 +362,7 @@ esp_err_t BL48250::init_pulse_feedback()
         m_pulse_ring_count_[i] = 0;
         m_pulse_ring_head_[i] = 0;
         m_last_ring_push_us_[i] = 0;
+        m_last_dir_change_us_[i] = 0;
         m_pulse_read_error_logged_[i] = false;
     }
 
@@ -489,6 +500,7 @@ void BL48250::deinit_pulse_feedback()
         m_pulse_ring_count_[i] = 0;
         m_pulse_ring_head_[i] = 0;
         m_last_ring_push_us_[i] = 0;
+        m_last_dir_change_us_[i] = 0;
         m_pulse_read_error_logged_[i] = false;
     }
 
@@ -510,8 +522,19 @@ bool BL48250::pulse_velocity_rad_s(size_t motor_idx, float * velocity, TickType_
     if (pcnt_units_[motor_idx] != nullptr)
     {
         const int64_t now_us = static_cast<int64_t>(esp_timer_get_time());
+        // Bench tests showed two hardware limits on the feedback net: counts
+        // drop out while duty is zero, and coasting after a direction flip is
+        // unsigned so it would appear with the new direction sign.
+        const bool blanked =
+          duty_cycles_[motor_idx] == 0 ||
+          (m_last_dir_change_us_[motor_idx] != 0 &&
+           (now_us - m_last_dir_change_us_[motor_idx]) < PULSE_REVERSAL_BLANKING_US);
         int count = 0;
-        if (pcnt_unit_get_count(pcnt_units_[motor_idx], &count) != ESP_OK)
+        if (blanked)
+        {
+            // Keep velocity invalid while blanked so callers rely on the angle encoder.
+        }
+        else if (pcnt_unit_get_count(pcnt_units_[motor_idx], &count) != ESP_OK)
         {
             if (!m_pulse_read_error_logged_[motor_idx])
             {
