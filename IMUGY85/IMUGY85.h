@@ -4,6 +4,7 @@
 #include <driver/i2c_master.h>
 #include <esp_log.h>
 #include <stdint.h>
+
 #include <cstdint>
 
 #include "ADXL345.h"
@@ -23,8 +24,7 @@ class IMUGY85
    public:
     static IMUGY85 & get_instance();
 
-    esp_err_t init_i2c_bus();
-    esp_err_t init();
+    esp_err_t init(i2c_master_bus_handle_t i2c_bus);
     i2c_master_bus_handle_t get_i2c_bus() const;
     bool is_initialized() const;
     bool is_mag_available() const;

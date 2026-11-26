@@ -43,8 +43,8 @@ NRF24L01::~NRF24L01()
 /**
  * @brief Registers the nRF24 on the shared SPI bus and brings the device up.
  *
- * SPIdev::init() must run first because it creates the shared bus. The mirf
- * driver drives the CE line configured by the constructor.
+ * SPIdev::init() must run first. The mirf driver drives the chip enable line
+ * configured by the constructor.
  */
 void NRF24L01::init_hw()
 {

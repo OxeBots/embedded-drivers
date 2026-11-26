@@ -50,6 +50,8 @@ class I2Cdev
    public:
     I2Cdev();
 
+    // Creates the shared bus from the board configuration.
+    static esp_err_t init();
     static void init(i2c_master_bus_handle_t bus_handle);
     static i2c_master_bus_handle_t get_bus_handle();
 

@@ -23,10 +23,8 @@ class SPIdev
    public:
     SPIdev() = default;
 
-    // Creates the shared SPI bus from the sdkconfig pins and host selection,
-    // and resets the device registry. Drivers only register devices on the
-    // bus after this call. Mirrors I2Cdev::init() as the single bus owner.
-    static void init();
+    // Creates the shared bus from the board configuration.
+    static esp_err_t init();
 
     // Registers a device before its first transaction. The chip select is
     // part of the device: SPIdev wires cs_gpio into the peripheral config so
@@ -44,8 +42,6 @@ class SPIdev
     static bool write(uint8_t device_key, const uint8_t * tx_data, size_t length);
 
    private:
-    static spi_host_device_t global_host_id;
-    static bool initialized;
     static spi_dev_cache_entry_t device_cache[SPIDEV_MAX_CACHED_DEVICES];
     static uint8_t cached_count;
     static SemaphoreHandle_t transaction_mutex;

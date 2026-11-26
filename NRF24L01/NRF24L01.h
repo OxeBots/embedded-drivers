@@ -29,8 +29,7 @@ class NRF24L01
     NRF24L01(gpio_num_t irq, NRF24_CePin ce);
     ~NRF24L01();
 
-    // Brings up the nRF24 device (Nrf24_init). SPIdev::init() must have
-    // created the shared bus first; the other SPI devices register on it.
+    // Brings up the nRF24 device after SPIdev::init() creates the shared bus.
     void init_hw();
 
     esp_err_t init(uint8_t channel,

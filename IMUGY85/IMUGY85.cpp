@@ -2,7 +2,6 @@
 #include "IMUGY85.h"
 
 #include <driver/gpio.h>
-#include <esp_rom_sys.h>
 #include <sdkconfig.h>
 
 #include <cstdint>
@@ -20,74 +19,20 @@ IMUGY85::IMUGY85() : m_i2c_bus(nullptr)
 }
 
 /**
- * Initialize the shared bus without probing the IMU sensors.
- */
-esp_err_t IMUGY85::init_i2c_bus()
-{
-    if (m_i2c_bus != nullptr)
-        return ESP_OK;
-
-    i2c_master_bus_config_t i2c_cfg = {
-      .i2c_port = static_cast<i2c_port_t>(CONFIG_I2C_PORT_NUM),
-      .sda_io_num = static_cast<gpio_num_t>(CONFIG_SDA_GPIO),
-      .scl_io_num = static_cast<gpio_num_t>(CONFIG_SCL_GPIO),
-      .clk_source = I2C_CLK_SRC_DEFAULT,
-      .glitch_ignore_cnt = 7,
-      .intr_priority = 0,
-      .trans_queue_depth = 0,
-      .flags = {.enable_internal_pullup = true, .allow_pd = false},
-    };
-
-    esp_err_t err = i2c_new_master_bus(&i2c_cfg, &m_i2c_bus);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Failed to create I2C master bus: %s", esp_err_to_name(err));
-        return err;
-    }
-
-    // A peripheral can hold the bus low across an ESP32 reset. Try clearing it
-    // once before registering any devices so an unusable bus cannot stall boot.
-    esp_rom_delay_us(100);
-    if (gpio_get_level(i2c_cfg.sda_io_num) == 0 || gpio_get_level(i2c_cfg.scl_io_num) == 0)
-    {
-        err = i2c_master_bus_reset(m_i2c_bus);
-        esp_rom_delay_us(100);
-        const int sda_level = gpio_get_level(i2c_cfg.sda_io_num);
-        const int scl_level = gpio_get_level(i2c_cfg.scl_io_num);
-        if (err != ESP_OK || sda_level == 0 || scl_level == 0)
-        {
-            ESP_LOGE(TAG,
-                     "I2C bus unavailable after recovery: SDA GPIO %d=%d, SCL GPIO %d=%d (%s).",
-                     i2c_cfg.sda_io_num,
-                     sda_level,
-                     i2c_cfg.scl_io_num,
-                     scl_level,
-                     esp_err_to_name(err));
-            esp_err_t delete_result = i2c_del_master_bus(m_i2c_bus);
-            if (delete_result != ESP_OK)
-                ESP_LOGW(TAG, "Failed to release I2C bus: %s", esp_err_to_name(delete_result));
-            m_i2c_bus = nullptr;
-            return err == ESP_OK ? ESP_ERR_TIMEOUT : err;
-        }
-    }
-
-    I2Cdev::init(m_i2c_bus);
-    ESP_LOGI(TAG, "I2C bus initialized (SDA=%d, SCL=%d).", CONFIG_SDA_GPIO, CONFIG_SCL_GPIO);
-    return ESP_OK;
-}
-
-/**
- * Initialize I2C bus and all IMU sensors.
+ * Initialize all IMU sensors on the shared I2C bus.
+ * @param i2c_bus Master bus created during boot.
  * @return ESP_OK on success
  */
-esp_err_t IMUGY85::init()
+esp_err_t IMUGY85::init(i2c_master_bus_handle_t i2c_bus)
 {
     if (m_initialized)
         return ESP_OK;
+    if (i2c_bus == nullptr)
+        return ESP_ERR_INVALID_ARG;
 
-    esp_err_t err = init_i2c_bus();
-    if (err != ESP_OK)
-        return err;
+    m_i2c_bus = i2c_bus;
+
+    esp_err_t err = ESP_OK;
 
     // ---- Initialize individual sensors ----
     m_accel.init();
@@ -187,7 +132,8 @@ void IMUGY85::read_gyro(int16_t * x, int16_t * y, int16_t * z, int16_t * temp)
     bool result_rot = m_gyro.get_rotation(x, y, z);
     bool result_temp = m_gyro.get_temperature(temp);
 
-    if(!result_rot && !result_temp){
+    if (!result_rot && !result_temp)
+    {
         ESP_LOGE(TAG, "Failed to get gyro temp and/or rotation");
     }
 }

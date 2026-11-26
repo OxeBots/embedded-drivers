@@ -8,69 +8,60 @@
 #include <esp_log.h>
 #include <sdkconfig.h>
 #include <stdlib.h>
-#include <string.h>
 
 static const char * TAG = "SPIdev";
 
-spi_host_device_t SPIdev::global_host_id = SPI2_HOST;
-bool SPIdev::initialized = false;
-spi_dev_cache_entry_t SPIdev::device_cache[SPIDEV_MAX_CACHED_DEVICES] = {};
-uint8_t SPIdev::cached_count = 0;
-SemaphoreHandle_t SPIdev::transaction_mutex = nullptr;
-
-void SPIdev::init()
-{
 #if CONFIG_SPI2_HOST
-    spi_host_device_t host_id = SPI2_HOST;
+static constexpr spi_host_device_t SHARED_SPI_HOST = SPI2_HOST;
 #elif CONFIG_SPI3_HOST
-    spi_host_device_t host_id = SPI3_HOST;
+static constexpr spi_host_device_t SHARED_SPI_HOST = SPI3_HOST;
 #else
 #error "Select SPI2_HOST or SPI3_HOST in menuconfig"
 #endif
 
-    // The bus is created here, once, from the sdkconfig pins; drivers only
-    // register devices on it afterwards.
-    spi_bus_config_t bus_config = {};
-    bus_config.mosi_io_num = CONFIG_MOSI_GPIO;
-    bus_config.miso_io_num = CONFIG_MISO_GPIO;
-    bus_config.sclk_io_num = CONFIG_SCLK_GPIO;
-    bus_config.quadwp_io_num = -1;
-    bus_config.quadhd_io_num = -1;
+spi_dev_cache_entry_t SPIdev::device_cache[SPIDEV_MAX_CACHED_DEVICES] = {};
+uint8_t SPIdev::cached_count = 0;
+SemaphoreHandle_t SPIdev::transaction_mutex = nullptr;
 
-    esp_err_t err = spi_bus_initialize(host_id, &bus_config, SPI_DMA_CH_AUTO);
-    if (err == ESP_ERR_INVALID_STATE)
+esp_err_t SPIdev::init()
+{
+    if (is_initialized())
+        return ESP_OK;
+
+    SemaphoreHandle_t mutex = xSemaphoreCreateMutex();
+    if (mutex == nullptr)
     {
-        // Already claimed (merged test binary: the first SPI suite creates it).
-        ESP_LOGI(TAG, "SPI bus already claimed on host %d; adopting it", host_id);
-    }
-    else if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "Failed to initialize SPI bus on host %d: %s", host_id, esp_err_to_name(err));
-        return;
+        ESP_LOGE(TAG, "Failed to create the SPI transaction mutex");
+        return ESP_ERR_NO_MEM;
     }
 
-    global_host_id = host_id;
-    initialized = true;
-    cached_count = 0;
-    memset(device_cache, 0, sizeof(device_cache));
-    if (transaction_mutex == nullptr)
+    spi_bus_config_t config = {};
+    config.mosi_io_num = CONFIG_MOSI_GPIO;
+    config.miso_io_num = CONFIG_MISO_GPIO;
+    config.sclk_io_num = CONFIG_SCLK_GPIO;
+    config.quadwp_io_num = -1;
+    config.quadhd_io_num = -1;
+    const esp_err_t result = spi_bus_initialize(SHARED_SPI_HOST, &config, SPI_DMA_CH_AUTO);
+    if (result != ESP_OK)
     {
-        transaction_mutex = xSemaphoreCreateMutex();
-        if (transaction_mutex == nullptr)
-            ESP_LOGE(TAG, "Failed to create the SPI transaction mutex");
+        vSemaphoreDelete(mutex);
+        return result;
     }
+
+    transaction_mutex = mutex;
+    return ESP_OK;
 }
 
 bool SPIdev::is_initialized()
 {
-    return initialized;
+    return transaction_mutex != nullptr;
 }
 
 bool SPIdev::register_device(uint8_t device_key,
                              gpio_num_t cs_gpio,
                              const spi_device_interface_config_t * dev_config)
 {
-    if (!initialized || dev_config == nullptr)
+    if (!is_initialized() || dev_config == nullptr)
         return false;
 
     spi_device_interface_config_t config = *dev_config;
@@ -105,7 +96,7 @@ bool SPIdev::register_device(uint8_t device_key,
 
 spi_device_handle_t SPIdev::get_device_handle(uint8_t device_key)
 {
-    if (!initialized)
+    if (!is_initialized())
     {
         ESP_LOGE(TAG, "SPIdev is not initialized");
         return nullptr;
@@ -124,7 +115,7 @@ spi_device_handle_t SPIdev::get_device_handle(uint8_t device_key)
         if (config.queue_size == 0)
             config.queue_size = 1;
 
-        esp_err_t err = spi_bus_add_device(global_host_id, &config, &entry.handle);
+        esp_err_t err = spi_bus_add_device(SHARED_SPI_HOST, &config, &entry.handle);
         if (err != ESP_OK)
         {
             ESP_LOGE(TAG, "Failed to add device key %u: %s", device_key, esp_err_to_name(err));

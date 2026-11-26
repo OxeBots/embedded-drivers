@@ -1,6 +1,8 @@
 #ifndef _VL53L5CX_H_
 #define _VL53L5CX_H_
 
+#include <driver/i2c_master.h>
+#include <esp_err.h>
 #include <stdint.h>
 
 #include "I2Cdev.h"
@@ -14,7 +16,7 @@ class VL53L5CX
     VL53L5CX(uint8_t address = DEFAULT_ADDRESS);
     ~VL53L5CX();
 
-    esp_err_t init();
+    esp_err_t init(i2c_master_bus_handle_t i2c_bus);
     bool test_connection();
     uint8_t set_resolution(uint8_t resolution);
     uint8_t set_ranging_frequency(uint8_t frequency_hz);

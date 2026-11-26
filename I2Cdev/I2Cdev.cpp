@@ -37,16 +37,16 @@
 
 #include "I2Cdev.h"
 
+#include <driver/gpio.h>
 #include <esp_err.h>
 #include <esp_log.h>
+#include <esp_rom_sys.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <sdkconfig.h>
 #include <string.h>
 
 static const char * TAG = "I2Cdev";
-
-#define I2C_NUM I2C_NUM_0
 
 // Static member definition
 uint16_t I2Cdev::read_timeout = I2CDEV_DEFAULT_READ_TIMEOUT;
@@ -58,11 +58,61 @@ I2Cdev::I2Cdev()
 {
 }
 
+/**
+ * Create the shared bus and recover lines held low during boot.
+ */
+esp_err_t I2Cdev::init()
+{
+    if (global_bus_handle != nullptr)
+        return ESP_OK;
+
+    const i2c_master_bus_config_t config = {
+      .i2c_port = static_cast<i2c_port_t>(CONFIG_I2C_PORT_NUM),
+      .sda_io_num = static_cast<gpio_num_t>(CONFIG_SDA_GPIO),
+      .scl_io_num = static_cast<gpio_num_t>(CONFIG_SCL_GPIO),
+      .clk_source = I2C_CLK_SRC_DEFAULT,
+      .glitch_ignore_cnt = 7,
+      .intr_priority = 0,
+      .trans_queue_depth = 0,
+      .flags = {.enable_internal_pullup = true, .allow_pd = false},
+    };
+    i2c_master_bus_handle_t bus = nullptr;
+    esp_err_t result = i2c_new_master_bus(&config, &bus);
+    if (result != ESP_OK)
+        return result;
+
+    // A peripheral can hold a line low across a reset.
+    esp_rom_delay_us(100);
+    if (gpio_get_level(config.sda_io_num) == 0 || gpio_get_level(config.scl_io_num) == 0)
+    {
+        result = i2c_master_bus_reset(bus);
+        esp_rom_delay_us(100);
+        const int sda_level = gpio_get_level(config.sda_io_num);
+        const int scl_level = gpio_get_level(config.scl_io_num);
+        if (result == ESP_OK && (sda_level == 0 || scl_level == 0))
+            result = ESP_ERR_TIMEOUT;
+        if (result != ESP_OK)
+        {
+            ESP_LOGW(TAG, "I2C recovery left SDA=%d and SCL=%d.", sda_level, scl_level);
+            const esp_err_t release_result = i2c_del_master_bus(bus);
+            if (release_result != ESP_OK)
+                ESP_LOGW(TAG, "Failed to release I2C bus: %s", esp_err_to_name(release_result));
+            return result;
+        }
+    }
+
+    init(bus);
+    return ESP_OK;
+}
+
 /** Initialize I2Cdev class with bus handle
  * @param bus_handle I2C master bus handle
  */
 void I2Cdev::init(i2c_master_bus_handle_t bus_handle)
 {
+    if (global_bus_handle == bus_handle)
+        return;
+
     global_bus_handle = bus_handle;
     // Reset cache on init
     cached_count = 0;

@@ -23,25 +23,25 @@ VL53L5CX::~VL53L5CX()
 }
 
 /**
- * @brief Creates an I2C device on the bus and loads sensor firmware.
+ * @brief Joins the sensor to the shared bus and loads its firmware.
  *
  * Wakes the sensor from sleep, then loads firmware via the ST API.
  * Must be called once before ranging.
  *
+ * @param i2c_bus Master bus created during boot.
  * @return ESP_OK on success, or an error code.
  */
-esp_err_t VL53L5CX::init()
+esp_err_t VL53L5CX::init(i2c_master_bus_handle_t i2c_bus)
 {
     if (m_initialized)
         return ESP_ERR_INVALID_STATE;
+    if (i2c_bus == nullptr)
+        return ESP_ERR_INVALID_ARG;
 
-    const i2c_master_bus_handle_t bus = I2Cdev::get_bus_handle();
-    if (bus == nullptr)
-        return ESP_ERR_INVALID_STATE;
     esp_err_t probe = ESP_ERR_NOT_FOUND;
     for (uint8_t attempt = 0; attempt < 3; ++attempt)
     {
-        probe = i2c_master_probe(bus, m_dev_addr >> 1, I2CDEV_DEFAULT_READ_TIMEOUT);
+        probe = i2c_master_probe(i2c_bus, m_dev_addr >> 1, I2CDEV_DEFAULT_READ_TIMEOUT);
         if (probe != ESP_ERR_NOT_FOUND || attempt == 2)
             break;
         vTaskDelay(pdMS_TO_TICKS(100));
