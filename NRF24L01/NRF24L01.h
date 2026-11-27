@@ -46,12 +46,19 @@ class NRF24L01
 
     // CE is a mirf CE pin: a GPIO, a virtual pin (HC595::Pin::write with a
     // shift-register bit as context) or none.
-    NRF24L01(gpio_num_t irq, NRF24_CePin ce);
+    NRF24L01(gpio_num_t irq,
+             NRF24_CePin ce,
+             gpio_num_t csn = static_cast<gpio_num_t>(CONFIG_CSN_GPIO),
+             uint8_t spi_device_key = CONFIG_NRF24_SPI_DEVICE_KEY);
     ~NRF24L01();
 
-    // Brings up the nRF24 device (Nrf24_init). SPIdev::init() must have
+    // Brings up the nRF24 device (Nrf24_init_ex). SPIdev::init() must have
     // created the shared bus first; the other SPI devices register on it.
     void init_hw();
+
+    // Enable dedicated TX-only Standby-I mode (used by the TX radio of a
+    // Dual-Radio Full-Duplex Base Station). Must be set before or after init_bytes().
+    void set_tx_only_mode(bool enabled);
 
     // Legacy string-address overload kept for hardware tests.
     esp_err_t init(uint8_t channel,
@@ -72,7 +79,8 @@ class NRF24L01
 
     // Synchronous addressed transmit (used by the ESP32 Base Station).
     // Switches TX_ADDR / RX_ADDR_P0 on demand, waits for hardware TX_DS / MAX_RT
-    // with a bounded timeout, reads OBSERVE_TX retry count, and returns to PRX.
+    // with a bounded timeout, reads OBSERVE_TX retry count, and returns to PRX
+    // (or Standby-I in tx_only_mode).
     esp_err_t send_to_sync(const uint8_t tx_addr[5],
                            const uint8_t * data,
                            uint8_t len,
@@ -80,11 +88,23 @@ class NRF24L01
                            TxResult * out_result,
                            uint32_t timeout_ms = 10);
 
+    // Synchronous addressed transmit on a temporary RF channel (e.g. old channel
+    // during live channel migration). Always restores m_channel before returning.
+    esp_err_t send_to_sync_on_channel(const uint8_t tx_addr[5],
+                                      uint8_t rf_channel,
+                                      const uint8_t * data,
+                                      uint8_t len,
+                                      bool no_ack,
+                                      TxResult * out_result,
+                                      uint32_t timeout_ms = 10);
+
     // Enable Pipe 2 for shared broadcast reception using W_TX_PAYLOAD_NO_ACK.
     esp_err_t enable_broadcast_pipe(uint8_t broadcast_lsb);
 
     // Runtime reconfiguration primitives (thread-safe via internal radio mutex).
     esp_err_t set_channel(uint8_t channel);
+    esp_err_t set_tx_channel(uint8_t tx_channel);
+    esp_err_t set_channels(uint8_t rx_channel, uint8_t tx_channel);
     esp_err_t set_rx_address(const uint8_t rx_addr[5]);
     esp_err_t set_rf_params(rf24_datarate_e rate,
                             rf24_pa_dbm_e pa,
@@ -93,10 +113,13 @@ class NRF24L01
 
     // Sweep RPD (-64 dBm carrier detect) across [start_ch..end_ch] and write
     // busy percentage (0..100) for each channel to out_busy_pct.
+    // Optional tx_epoch (odd while co-located TX radio is transmitting) discards
+    // samples overlapping local TX bursts to prevent RPD self-contamination.
     esp_err_t scan_spectrum(uint8_t start_ch,
                             uint8_t end_ch,
                             uint8_t samples_per_ch,
-                            uint8_t * out_busy_pct);
+                            uint8_t * out_busy_pct,
+                            const std::atomic<uint32_t> * tx_epoch = nullptr);
 
     // Radio Health Watchdog: verifies core registers and soft-resets the chip
     // if brownout or electromagnetic interference reset the radio registers.
@@ -104,7 +127,9 @@ class NRF24L01
     esp_err_t reconfigure_if_needed();
 
     bool is_ready() const;
+    bool is_tx_only_mode() const;
     uint8_t get_channel() const;
+    uint8_t get_tx_channel() const;
     rf24_datarate_e get_data_rate() const;
     rf24_pa_dbm_e get_pa_level() const;
     uint8_t get_retransmit_delay() const;
@@ -118,6 +143,7 @@ class NRF24L01
 
     void drain_rx_locked();
     void apply_idle_rx_pipes_locked();
+    void enter_standby_tx_locked();
     bool is_config_healthy_locked();
     esp_err_t apply_full_config_locked();
     esp_err_t reconfigure_locked();
@@ -126,15 +152,20 @@ class NRF24L01
     NRF24_t m_dev;
     gpio_num_t m_irq_pin;
     NRF24_CePin m_ce;
+    gpio_num_t m_csn_pin;
+    uint8_t m_spi_device_key;
     TaskHandle_t m_task_handle;
     QueueHandle_t m_interrupt_queue;
     QueueHandle_t m_tx_queue;
     SemaphoreHandle_t m_radio_mutex;
+    SemaphoreHandle_t m_tx_done_sem = nullptr;
     data_received_callback_t m_on_data_received;
     void * m_callback_context = nullptr;
 
     uint8_t m_payload_size = 32;
     uint8_t m_channel = 76;
+    uint8_t m_tx_channel = 76;
+    bool m_tx_only_mode = false;
     rf24_datarate_e m_data_rate = RF24_2MBPS;
     rf24_pa_dbm_e m_pa_level = RF24_PA_MAX;
     uint8_t m_retransmit_delay = 2;
